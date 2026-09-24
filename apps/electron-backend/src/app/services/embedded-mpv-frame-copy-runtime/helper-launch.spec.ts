@@ -12,7 +12,9 @@ function fakeStat(
     };
 }
 
-describe('createLinuxFrameCopyHelperLaunch', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'createLinuxFrameCopyHelperLaunch',
+    () => {
     const helperArgs = ['--runtime-probe'];
 
     it.each([

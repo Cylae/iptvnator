@@ -1,4 +1,5 @@
 import { unlinkSync } from 'node:fs';
+import { readArchiveStats } from './download-catchup-stats';
 import { cleanupStoredCatchupPartial } from './download-catchup-removal';
 import { ArchivePartialReplacedError } from './download-catchup-output';
 import { handleDownloadFailure } from './download-finalize';
@@ -122,7 +123,7 @@ it.each(['failed', 'canceled'])(
         jest.mocked(getDatabase).mockResolvedValue(db as never);
         jest.mocked(transferCatchupToPartialFile).mockImplementationOnce(
             async (_db, active, reservation) => {
-                active.catchupPartialIdentity = await lstat(
+                active.catchupPartialIdentity = await readArchiveStats(
                     reservation.partialPath
                 );
                 expect(active.catchupExpectedPartialIdentity).toEqual(
@@ -147,7 +148,7 @@ it.each(['failed', 'canceled'])(
         try {
             task.filePath = join(directory, 'show.ts');
             await writeFile(task.filePath + '.part', 'retained archive');
-            const partial = await lstat(task.filePath + '.part');
+            const partial = await readArchiveStats(task.filePath + '.part');
             jest.mocked(readArchiveFinalizations).mockResolvedValueOnce(
                 new Map([
                     [
@@ -231,7 +232,7 @@ it.each([1880, null])(
         jest.mocked(transferCatchupToPartialFile).mockImplementationOnce(
             async (_db, active, reservation) => {
                 await writeFile(reservation.partialPath, body);
-                active.catchupPartialIdentity = await lstat(
+                active.catchupPartialIdentity = await readArchiveStats(
                     reservation.partialPath
                 );
                 active.totalBytes = totalBytes;
@@ -338,7 +339,7 @@ it.each([false, true])(
         const filePath = join(directory, 'show.ts');
         try {
             await writeFile(filePath + '.part', 'owned archive');
-            const original = await lstat(filePath + '.part');
+            const original = await readArchiveStats(filePath + '.part');
             jest.mocked(readArchiveFinalizations).mockResolvedValueOnce(
                 new Map([
                     [
@@ -443,7 +444,7 @@ it.each(['failed', 'canceled'])(
                     reservation.partialPath,
                     'verified archive bytes'
                 );
-                active.catchupPartialIdentity = await lstat(
+                active.catchupPartialIdentity = await readArchiveStats(
                     reservation.partialPath
                 );
                 mockProofs.set(active.id, {

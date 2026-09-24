@@ -1,4 +1,5 @@
 import { openCatchupOutput } from './download-catchup-output';
+import { readArchiveStatsSync } from './download-catchup-stats';
 import {
     verifiedArchiveSize,
     parseArchiveFinalization,
@@ -43,7 +44,7 @@ beforeEach(() => {
         version: 1,
         phase: 'transfer',
         filePath,
-        partialIdentity: lstatSync(filePath + '.part'),
+        partialIdentity: readArchiveStatsSync(filePath + '.part'),
     };
     jest.mocked(renameSync).mockReset().mockImplementation(actual.renameSync);
     jest.mocked(unlinkSync).mockReset().mockImplementation(actual.unlinkSync);
@@ -225,7 +226,7 @@ it.each([false, true])(
             ...proof,
             phase: 'finalization',
             size: 100,
-            finalIdentity: lstatSync(filePath),
+            finalIdentity: readArchiveStatsSync(filePath),
         };
         const record = (path: string, kind = 'partial') => {
             journal = {
@@ -265,7 +266,7 @@ it.each([false, true])(
             ...proof,
             phase: 'finalization',
             size: complete ? 7 : 100,
-            finalIdentity: lstatSync(filePath),
+            finalIdentity: readArchiveStatsSync(filePath),
         };
         const db = {
             select: () => ({
@@ -320,7 +321,7 @@ it('rejects a reused inode before truncating or replacing the journal proof', as
 
 it('does not recover a same-size final from a reused inode or a legacy proof without creation time', () => {
     writeFileSync(filePath, 'foreign archive');
-    const final = lstatSync(filePath);
+    const final = readArchiveStatsSync(filePath);
     const journal: ArchiveFinalizationProof = {
         ...proof,
         phase: 'finalization',
@@ -351,7 +352,7 @@ it.each([false, true])(
     'does not relocate an unproved fallback target (replaced=%s)',
     async (replaced) => {
         writeFileSync(filePath, '');
-        const createdIdentity = lstatSync(filePath);
+        const createdIdentity = readArchiveStatsSync(filePath);
         if (replaced) {
             renameSync(filePath, join(directory, 'empty-original'));
             writeFileSync(filePath, 'foreign final');

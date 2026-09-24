@@ -1,4 +1,4 @@
-import { archiveFileStats } from './download-catchup-stats';
+import { archiveFileStats, readArchiveStats } from './download-catchup-stats';
 import {
     mkdtemp,
     lstat,
@@ -39,7 +39,7 @@ describe('archive file promotion', () => {
             filename: 'show.ts',
         };
         await writeFile(reservation.partialPath, 'validated bytes');
-        const identity = await lstat(reservation.partialPath);
+        const identity = await readArchiveStats(reservation.partialPath);
         return { reservation, identity };
     }
     it('rejects a same-sized replacement between transfer and promotion', async () => {
@@ -160,8 +160,8 @@ describe('archive file promotion', () => {
                             lstat(reservation.path)
                         ).rejects.toMatchObject({ code: 'ENOENT' });
                     } else {
-                        const created = archiveFileStats(
-                            await lstat(reservation.path)
+                        const created = await readArchiveStats(
+                            reservation.path
                         );
                         expect(created).toEqual(
                             expect.objectContaining({
@@ -190,7 +190,7 @@ describe('archive file promotion', () => {
             const { reservation } = await prepare();
             const bytes = Buffer.alloc(192 * 1024, 0x47);
             await writeFile(reservation.partialPath, bytes);
-            const identity = await lstat(reservation.partialPath);
+            const identity = await readArchiveStats(reservation.partialPath);
             jest.mocked(link).mockRejectedValueOnce(
                 Object.assign(new Error('unsupported'), { code: 'ENOTSUP' })
             );

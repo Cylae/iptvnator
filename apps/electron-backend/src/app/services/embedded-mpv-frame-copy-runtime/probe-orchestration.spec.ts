@@ -18,7 +18,9 @@ import {
     type RuntimeTestContext,
 } from './runtime-harness.test-helpers';
 
-describe('embedded-mpv frame-copy runtime probe orchestration', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'embedded-mpv frame-copy runtime probe orchestration',
+    () => {
     let context: RuntimeTestContext;
 
     beforeEach(() => {

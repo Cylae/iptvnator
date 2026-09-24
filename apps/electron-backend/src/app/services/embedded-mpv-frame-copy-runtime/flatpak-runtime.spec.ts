@@ -15,7 +15,9 @@ const FREEDESKTOP_EGL_EXTERNAL_PLATFORM_CONFIG_DIRS = [
     '/usr/share/egl/egl_external_platform.d',
 ].join(':');
 
-describe('Flatpak embedded MPV frame-copy runtime', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'Flatpak embedded MPV frame-copy runtime',
+    () => {
     it('reconstructs the immutable Freedesktop GL metadata inside the packaged app', () => {
         expect(
             createLinuxFrameCopyHelperEnvironment(

@@ -1,3 +1,4 @@
+import { readArchiveStats } from './download-catchup-stats';
 import {
     link,
     lstat,
@@ -37,7 +38,7 @@ afterEach(async () => {
 async function prepare() {
     const path = join(directory, 'show.ts.part');
     await writeFile(path, 'archive');
-    return { path, identity: await lstat(path) };
+    return { path, identity: await readArchiveStats(path) };
 }
 it('removes the captured owned entry and its empty quarantine', async () => {
     const { path, identity } = await prepare();
@@ -103,6 +104,8 @@ it('preserves an unopened partial and removes it only with matching ownership', 
     const final = path.slice(0, -'.part'.length);
     expect(await cleanupCatchupPartial(final, undefined)).toBe(false);
     expect(await readFile(path, 'utf8')).toBe('archive');
-    expect(await cleanupCatchupPartial(final, await lstat(path))).toBe(true);
+    expect(
+        await cleanupCatchupPartial(final, await readArchiveStats(path))
+    ).toBe(true);
     await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
 });

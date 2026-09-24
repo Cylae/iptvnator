@@ -165,7 +165,7 @@ describe('Linux Embedded MPV linkage resolution', () => {
     it('uses and identifies the unmanaged system libmpv only for system development', () => {
         const { resolveLinuxFrameCopyLinkageInputs } = loadLinkageModule();
         const readDynamicSection = jest.fn((filePath: string) => {
-            expect(filePath).toBe('/opt/libmpv/lib/libmpv.so');
+            expect(filePath).toBe(path.join('/opt/libmpv/lib', 'libmpv.so'));
             return readelfDynamic([['SONAME', 'libmpv.so.2']]);
         });
 

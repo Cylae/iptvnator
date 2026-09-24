@@ -1,11 +1,4 @@
-import { of } from 'rxjs';
-import {
-    Playlist,
-    PlaylistBackupManifestV1,
-    PLAYLIST_BACKUP_KIND,
-    PLAYLIST_BACKUP_VERSION,
-    XtreamPlaylistBackupEntry,
-} from '@iptvnator/shared/interfaces';
+import { XtreamPlaylistBackupEntry } from '@iptvnator/shared/interfaces';
 import { createPlaylistBackupService } from './playlist-backup.service.test-helpers';
 import {
     createRestoreCollaborators,

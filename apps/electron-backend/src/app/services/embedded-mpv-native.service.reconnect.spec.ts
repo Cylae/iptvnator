@@ -18,7 +18,7 @@ import {
     statSync,
     writeFileSync,
 } from 'fs';
-import { tmpdir } from 'os';
+import { platform as osPlatform, tmpdir } from 'os';
 import path from 'path';
 import type { EmbeddedMpvNativeService as EmbeddedMpvNativeServiceType } from './embedded-mpv-native.service';
 
@@ -286,7 +286,9 @@ describe('EmbeddedMpvNativeService reconnect', () => {
         expect(readFileSync(file, 'utf8')).toBe(
             'network-timeout=10\nhttp-header-fields=X-Key: secret\n'
         );
-        expect(statSync(file).mode & 0o777).toBe(0o600);
+        if (osPlatform() !== 'win32') {
+            expect(statSync(file).mode & 0o777).toBe(0o600);
+        }
 
         service.disposeSession('session-1');
         expect(existsSync(file)).toBe(false);

@@ -1,5 +1,4 @@
 import {
-    WORKER_PERFORMANCE_UNAVAILABLE_REASON,
     armWorkerPerformanceCapture,
     executeWithWorkerPerformanceCapture,
     stampWorkerPerformanceResponsePostedEpoch,

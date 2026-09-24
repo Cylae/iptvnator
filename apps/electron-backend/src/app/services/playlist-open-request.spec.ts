@@ -122,20 +122,23 @@ describe('extractPlaylistOpenRequestsFromArgv', () => {
 
     // `%U` hands over the whole selection, one argument per file.
     it('keeps every playlist of a multi-file selection, in order', () => {
+        const firstPath = resolve('/home/user/first.m3u');
+        const secondPath = resolve('/home/user/second list.m3u8');
+        const moviePath = resolve('/home/user/movie.mkv');
         const requests = extractPlaylistOpenRequestsFromArgv([
-            '/opt/iptvnator/iptvnator',
+            resolve('/opt/iptvnator/iptvnator'),
             '--ozone-platform=x11',
-            'file:///home/user/first.m3u',
-            '/home/user/movie.mkv',
-            'file:///home/user/second%20list.m3u8',
+            pathToFileURL(firstPath).href,
+            moviePath,
+            pathToFileURL(secondPath).href,
         ]);
 
         expect(requests).toHaveLength(2);
         expect(requests).toMatchObject([
-            { fileName: 'first.m3u', filePath: '/home/user/first.m3u' },
+            { fileName: 'first.m3u', filePath: firstPath },
             {
                 fileName: 'second list.m3u8',
-                filePath: '/home/user/second list.m3u8',
+                filePath: secondPath,
             },
         ]);
     });

@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 const mockRequest = jest.fn();
 const mockDialog = jest.fn();
 const mockRead = jest.fn();
@@ -72,8 +74,8 @@ describe('optional legacy profile recovery', () => {
             mockCopy.mock.invocationCallOrder[0]
         );
         expect(mockCopy).toHaveBeenCalledWith(
-            '/synthetic/electron-backend/IndexedDB',
-            '/synthetic/snapshot/IndexedDB',
+            join('/synthetic/electron-backend', 'IndexedDB'),
+            join('/synthetic/snapshot', 'IndexedDB'),
             { recursive: true, dereference: true }
         );
         expect(mockRequest).toHaveBeenCalledWith('DB_MIGRATE_APP_PLAYLISTS', {

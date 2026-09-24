@@ -46,7 +46,9 @@ const GRAPHICS_SELECTOR_ENVIRONMENT = {
     VK_LOADER_DRIVERS_SELECT: '*mesa*',
 } as const;
 
-describe('createLinuxFrameCopyHelperEnvironment', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'createLinuxFrameCopyHelperEnvironment',
+    () => {
     it('removes ambient loader overrides for system packages', () => {
         expect(
             createLinuxFrameCopyHelperEnvironment(

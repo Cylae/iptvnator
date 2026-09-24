@@ -5,7 +5,9 @@ import {
     type RuntimeTestContext,
 } from './runtime-harness.test-helpers';
 
-describe('embedded-mpv frame-copy helper failures', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'embedded-mpv frame-copy helper failures',
+    () => {
     let context: RuntimeTestContext;
 
     beforeEach(() => {

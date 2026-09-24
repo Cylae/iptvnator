@@ -1,4 +1,4 @@
-import { archiveFileStats } from './download-catchup-stats';
+import { archiveFileStats, readArchiveStats } from './download-catchup-stats';
 import { openCatchupOutput } from './download-catchup-output';
 import {
     mkdtemp,
@@ -41,7 +41,9 @@ it.each([false, true])(
                 directory,
                 fileName: 'show.ts',
                 url: 'https://provider.test/archive.ts',
-                catchupExpectedPartialIdentity: await lstat(filePath + '.part'),
+                catchupExpectedPartialIdentity: await readArchiveStats(
+                    filePath + '.part'
+                ),
             };
             jest.mocked(readArchiveFinalizations).mockResolvedValue(
                 new Map([
@@ -88,9 +90,7 @@ it.each([false, true])(
                     code: 'ENOENT',
                 });
                 expect(
-                    archiveFileStats(
-                        await lstat(join(directory, 'show (1).ts.part'))
-                    )
+                    await readArchiveStats(join(directory, 'show (1).ts.part'))
                 ).toEqual(
                     expect.objectContaining(
                         task.catchupExpectedPartialIdentity!
@@ -114,8 +114,8 @@ it('removes a journaled incomplete final before retrying the retained archive', 
             version: 1 as const,
             filePath,
             size: 100,
-            partialIdentity: await lstat(filePath + '.part'),
-            finalIdentity: await lstat(filePath),
+            partialIdentity: await readArchiveStats(filePath + '.part'),
+            finalIdentity: await readArchiveStats(filePath),
         };
         jest.mocked(readArchiveFinalizations).mockResolvedValue(
             new Map([[1, proof]])

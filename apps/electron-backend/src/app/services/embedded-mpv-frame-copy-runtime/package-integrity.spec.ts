@@ -19,7 +19,9 @@ import {
     type RuntimeTestContext,
 } from './runtime-harness.test-helpers';
 
-describe('embedded-mpv frame-copy package integrity', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'embedded-mpv frame-copy package integrity',
+    () => {
     let context: RuntimeTestContext;
 
     beforeEach(() => {

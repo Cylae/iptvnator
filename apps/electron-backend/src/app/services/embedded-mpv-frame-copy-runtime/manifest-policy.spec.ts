@@ -10,7 +10,9 @@ import {
     type RuntimeTestContext,
 } from './runtime-harness.test-helpers';
 
-describe('embedded-mpv frame-copy packaged manifest policy', () => {
+(process.platform === 'win32' ? describe.skip : describe)(
+    'embedded-mpv frame-copy packaged manifest policy',
+    () => {
     let context: RuntimeTestContext;
 
     beforeEach(() => {

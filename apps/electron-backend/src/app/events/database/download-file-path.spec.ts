@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -165,7 +165,15 @@ describe('partial download helpers', () => {
 
         try {
             writeFileSync(join(directory, 'target.bin'), 'attacker');
-            symlinkSync(join(directory, 'target.bin'), partialPath);
+            try {
+                symlinkSync(join(directory, 'target.bin'), partialPath);
+            } catch (err: unknown) {
+                if ((err as NodeJS.ErrnoException).code === 'EPERM') {
+                    mkdirSync(partialPath);
+                } else {
+                    throw err;
+                }
+            }
 
             expect(() => getPartialDownloadSize(finalPath)).toThrow(
                 'not a regular file'

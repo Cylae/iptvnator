@@ -38,6 +38,7 @@ jest.mock('../workers/worker-runtime-paths', () => ({
         mockResolveWorkerRuntimeBootstrap(...args),
 }));
 
+import { resolve } from 'path';
 import { retireEpgSource } from './epg-source-generation';
 import { EpgWorkerService } from './epg-worker.service';
 
@@ -183,7 +184,7 @@ describe('EpgWorkerService worker lifecycle', () => {
 
             expect(
                 service.localSourceAuthorizer.ensureAllowed
-            ).toHaveBeenCalledWith(localPath);
+            ).toHaveBeenCalledWith(resolve(localPath));
             expect(mockWorkerInstances).toHaveLength(0);
             expect(progressSpy).toHaveBeenCalledWith(
                 localPath,

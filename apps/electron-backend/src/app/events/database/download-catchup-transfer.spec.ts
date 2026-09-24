@@ -26,6 +26,7 @@ import {
     getArchiveByteLimit,
 } from './download-catchup-limits';
 import { stat } from 'node:fs/promises';
+import { readArchiveStats } from './download-catchup-stats';
 
 jest.mock('./download-catchup-journal', () => ({
     ...jest.requireActual('./download-catchup-journal'),
@@ -123,13 +124,17 @@ describe('TS archive transfer', () => {
         };
         try {
             await writeFile(path + '.part', 'old data');
-            task.catchupExpectedPartialIdentity = await stat(path + '.part');
+            task.catchupExpectedPartialIdentity = await readArchiveStats(
+                path + '.part'
+            );
             jest.mocked(recordArchivePartial).mockImplementationOnce(
                 async (_db, id, filePath, identity) => {
                     expect(filePath).toBe(path);
                     expect(identity).toEqual(
                         expect.objectContaining({
-                            ino: String((await stat(path + '.part')).ino),
+                            ino: String(
+                                (await readArchiveStats(path + '.part')).ino
+                            ),
                         })
                     );
                     expect(id).toBe(task.id);
@@ -236,7 +241,11 @@ describe('TS archive transfer', () => {
     });
 });
 
-it.each(['symlink', 'hardlink', 'regular file'])(
+it.each(
+    process.platform === 'win32'
+        ? ['hardlink', 'regular file']
+        : ['symlink', 'hardlink', 'regular file']
+)(
     'refuses a retained archive partial replaced by a %s',
     async (kind) => {
         const directory = await mkdtemp(join(tmpdir(), 'archive-replaced-'));
@@ -303,7 +312,7 @@ it('requires both finalization proof and unchanged identity to recover completio
         expect(await getExistingCompletedFileProgress(task)).toBeNull();
         task.catchupFinalized = {
             filePath,
-            identity: await stat(filePath),
+            identity: await readArchiveStats(filePath),
             size: packets.length,
         };
         expect(await getExistingCompletedFileProgress(task)).toEqual({

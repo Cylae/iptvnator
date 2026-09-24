@@ -80,7 +80,9 @@ describe('EmbeddedMpvFrameCopyAdapter Linux loader environment', () => {
         });
     });
 
-    it('keeps trusted Snap GL roots ahead of generic Snap libraries for playback', () => {
+    (process.platform === 'win32' ? it.skip : it)(
+        'keeps trusted Snap GL roots ahead of generic Snap libraries for playback',
+        () => {
         const snapRoot = '/snap/iptvnator/42';
         const nativeDir = path.join(
             snapRoot,
