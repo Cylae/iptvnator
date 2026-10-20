@@ -85,80 +85,8 @@ export function isPrivateOrReservedIpv4(address: string): boolean {
     return isIP(address) !== 4 || blockedIpv4.check(address, 'ipv4');
 }
 
-function parseIpv6Words(address: string): number[] | null {
-    const halves = address.split('::');
-    if (halves.length > 2) {
-        return null;
-    }
-
-    const parseHalf = (half: string): number[] | null => {
-        if (!half) {
-            return [];
-        }
-
-        const words: number[] = [];
-        for (const part of half.split(':')) {
-            if (part.includes('.')) {
-                const octets = part.split('.').map((octet) => Number(octet));
-                if (
-                    octets.length !== 4 ||
-                    octets.some(
-                        (octet) =>
-                            !Number.isInteger(octet) || octet < 0 || octet > 255
-                    )
-                ) {
-                    return null;
-                }
-                words.push(
-                    (octets[0] << 8) | octets[1],
-                    (octets[2] << 8) | octets[3]
-                );
-                continue;
-            }
-
-            if (!/^[0-9a-f]{1,4}$/i.test(part)) {
-                return null;
-            }
-            words.push(Number.parseInt(part, 16));
-        }
-        return words;
-    };
-
-    const left = parseHalf(halves[0]);
-    const right = parseHalf(halves[1] ?? '');
-    if (!left || !right) {
-        return null;
-    }
-
-    if (halves.length === 1) {
-        return left.length === 8 ? left : null;
-    }
-
-    const omittedWordCount = 8 - left.length - right.length;
-    if (omittedWordCount < 1) {
-        return null;
-    }
-
-    return [...left, ...Array<number>(omittedWordCount).fill(0), ...right];
-}
-
-function getMappedIpv4Address(address: string): string | null {
-    const words = parseIpv6Words(address);
-    if (
-        !words ||
-        words.slice(0, 5).some((word) => word !== 0) ||
-        words[5] !== 0xffff
-    ) {
-        return null;
-    }
-
-    return [
-        words[6] >> 8,
-        words[6] & 0xff,
-        words[7] >> 8,
-        words[7] & 0xff,
-    ].join('.');
-}
+const mappedIpv4 = new BlockList();
+mappedIpv4.addSubnet('::ffff:0:0', 96, 'ipv6');
 
 const globallyRoutableIpv6 = new BlockList();
 globallyRoutableIpv6.addSubnet('2000::', 3, 'ipv6');
@@ -175,11 +103,10 @@ for (const [network, prefix] of [
 
 export function isPrivateOrReservedIpv6(address: string): boolean {
     const normalized = address.toLowerCase();
-    const mappedIpv4 = getMappedIpv4Address(normalized);
 
-    // Mapped addresses inherit the policy of their embedded IPv4 address.
-    if (mappedIpv4) {
-        return isPrivateOrReservedIpv4(mappedIpv4);
+    // IPv4-mapped IPv6 addresses inherit the IPv4 range policy.
+    if (mappedIpv4.check(normalized, 'ipv6')) {
+        return blockedIpv4.check(normalized, 'ipv6');
     }
 
     // Accept only global-unicast space, then exclude special-purpose blocks.
