@@ -37,6 +37,7 @@ import {
     WebBackendHttpClient,
 } from './validated-http-client';
 import { ProviderRequestError } from './provider-request-error';
+import { ProviderTargetRegistry } from './provider-target-registry';
 import {
     ProviderUrlPolicy,
     providerUrlErrorBody,
@@ -69,8 +70,6 @@ export interface WebBackendAppOptions {
     readonly runtimeBackendUrl?: string;
 }
 
-type ProviderTargetRegistry = Map<string, URL>;
-
 export function createWebBackendApp(
     options: WebBackendAppOptions = {}
 ): Express {
@@ -100,7 +99,7 @@ export function createWebBackendApp(
         providerUrlPolicy,
         options.httpClient
     );
-    const providerTargets: ProviderTargetRegistry = new Map();
+    const providerTargets = new ProviderTargetRegistry();
 
     const corsMiddleware = cors({
         origin(origin, callback) {
