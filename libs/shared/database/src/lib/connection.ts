@@ -1217,7 +1217,7 @@ export async function initDatabase(
     if (db) return db;
     if (initPromise) return initPromise;
 
-    initPromise = (async () => {
+    const initialization = (async () => {
         const filePath = getDatabasePath();
         sqlite = new Database(filePath, {
             readonly,
@@ -1257,7 +1257,30 @@ export async function initDatabase(
         return database;
     })();
 
-    return initPromise;
+    // A failed open or migration must not poison the module-scoped promise:
+    // later callers may retry after a transient filesystem/database problem.
+    let retryableInitialization: Promise<DatabaseInstance>;
+    retryableInitialization = initialization.catch((error: unknown) => {
+        // A caller may close the failed connection and start a new attempt
+        // before this rejection handler runs. Never clear that newer attempt.
+        if (initPromise === retryableInitialization) {
+            if (sqlite) {
+                try {
+                    sqlite.close();
+                } catch {
+                    // Preserve the original initialization error.
+                }
+            }
+
+            sqlite = null;
+            db = null;
+            initPromise = null;
+        }
+        throw error;
+    });
+    initPromise = retryableInitialization;
+
+    return retryableInitialization;
 }
 
 /**
