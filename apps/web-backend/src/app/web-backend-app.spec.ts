@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import { createWebBackendApp } from './web-backend-app';
 import {
     registerProviderTarget,
@@ -90,6 +91,7 @@ https://stream.example/news.m3u8`);
                 expect(httpClient.requests).toEqual([
                     {
                         headers: undefined,
+                        maxResponseBytes: 64 * 1024 * 1024,
                         params: undefined,
                         timeout: 30000,
                         url: 'https://provider.example/list.m3u',
@@ -203,6 +205,7 @@ https://stream.example/news.m3u8`);
                 expect(httpClient.requests).toEqual([
                     {
                         headers: undefined,
+                        maxResponseBytes: 64 * 1024 * 1024,
                         params: undefined,
                         timeout: 30000,
                         url: 'https://provider.example/guide.xml',
@@ -211,6 +214,39 @@ https://stream.example/news.m3u8`);
             }
         );
     });
+
+    it.each(['guide.xml.gz', 'guide.xml.GZ'])(
+        'caps compressed XMLTV downloads before decompression for %s',
+        async (path) => {
+            const httpClient = new StubHttpClient();
+            httpClient.queueResponse(gzipSync('<tv></tv>'));
+
+            await withServer(
+                createWebBackendApp({
+                    httpClient,
+                    resolveHostname: resolvePublicHost,
+                }),
+                async (baseUrl) => {
+                    const sourceUrl = `https://provider.example/${path}`;
+                    const targetId = await registerProviderTarget(
+                        baseUrl,
+                        sourceUrl
+                    );
+                    const response = await fetch(
+                        `${baseUrl}/parse-xml?targetId=${targetId}`
+                    );
+
+                    expect(response.status).toBe(200);
+                    await response.json();
+                    expect(httpClient.requests[0]).toMatchObject({
+                        maxResponseBytes: 32 * 1024 * 1024,
+                        responseType: 'arraybuffer',
+                        url: sourceUrl,
+                    });
+                }
+            );
+        }
+    );
 
     it('extracts KODIPROP ClearKey DRM on the /parse URL-import path', async () => {
         const httpClient = new StubHttpClient();
@@ -791,6 +827,39 @@ https://stream.example/live.m3u8`);
         } finally {
             errorSpy.mockRestore();
         }
+    });
+
+    it('returns 502 when a provider responds but its body cannot be consumed', async () => {
+        const httpClient = new StubHttpClient();
+        httpClient.queueNetworkError(
+            Object.assign(new Error('Provider response body failed'), {
+                code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                response: { status: 200, statusText: 'OK' },
+            })
+        );
+
+        await withServer(
+            createWebBackendApp({
+                httpClient,
+                resolveHostname: resolvePublicHost,
+            }),
+            async (baseUrl) => {
+                const targetId = await registerProviderTarget(
+                    baseUrl,
+                    'https://provider.example/list.m3u'
+                );
+                const response = await fetch(
+                    `${baseUrl}/parse?targetId=${targetId}`
+                );
+
+                expect(response.status).toBe(502);
+                await expect(response.json()).resolves.toEqual({
+                    message: 'Provider response exceeded the configured size limit',
+                    status: 502,
+                    code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                });
+            }
+        );
     });
 
     it('returns provider parse errors as JSON instead of executable text', async () => {

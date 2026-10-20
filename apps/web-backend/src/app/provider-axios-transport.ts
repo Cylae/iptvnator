@@ -47,6 +47,10 @@ export class ProviderAxiosTransport implements WebBackendHttpClient {
         agent.options.checkServerIdentity = (_name, certificate) =>
             checkServerIdentity(hostname, certificate);
         const { onConnect, ...axiosOptions } = options;
+        // The wrapper enforces this limit while buffering the final body.
+        // Keep it visible to injected transports, but never pass this custom
+        // policy field through to Axios itself.
+        delete axiosOptions.maxResponseBytes;
         const response = await axios.get<T>(root, {
             ...axiosOptions,
             params: undefined,

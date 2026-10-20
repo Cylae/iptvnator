@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** In progress — PR #1 (Nx lockfile validation) and PR #2 (SSRF address classification, localhost canonicalization, and redirect credential handling) are merged into `master` (current head `43c317bee1f2b00f2d4506b8cdbbd933e0e2cb25`). PRs #4–#7 cover remote response limits, database initialization recovery, decoded XMLTV limits, and bounded PWA provider-target state. These PRs remain unmerged and have no recorded repository CI results. GitHub Actions currently reports no workflow runs/checks, and this environment cannot resolve `github.com` for a local clone.
+**Status:** Consolidated integration in progress — database initialization recovery from PR #5 is merged into `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e`. The response-size changes from PR #4, XMLTV decoded-size changes from PR #6, and bounded PWA target registry from PR #7 are being integrated on `fix/pwa-provider-target-memory-bound-2026-10-20`. Full repository validation remains unavailable: local checkout cannot resolve `github.com`, and GitHub currently reports no Actions runs or commit checks. No final-head test/build success is claimed.
 
 ## Initial inventory
 
@@ -74,11 +74,12 @@ Do not declare completion until the final commit has been checked against the in
 
 ### Current continuation plan
 
-1. Restore a runnable checkout or an actual GitHub Actions execution path before claiming test, typecheck, lint, build, coverage, or packaging success.
-2. Run the exact affected project suites and typechecks for PRs #4–#7 on their current heads; standalone probes are supplemental only.
-3. Resolve the EPG partial-refresh data-integrity risk before release, and test the chosen behavior against a real SQLite database.
-4. Keep PR #7 based on current `master`; after its documentation conflict is reconciled, keep it open until the web-backend/web tests, lint, typechecks, coverage gates, and relevant PWA E2E checks have actual results.
-5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits referenced only in the previous session transcript as unimplemented until their patch or working tree is recovered and verified.
+1. Keep one integration PR (#7) containing the non-conflicting changes from #4, #6 and #7. PRs #4 and #6 will be closed as superseded only after their file changes and commit ancestry are preserved in the integration branch.
+2. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
+3. Resolve or explicitly accept the EPG partial-refresh data-integrity limitation before production release; an atomic source replacement design remains a release consideration.
+4. Validate the integration using the repository's declared Node/pnpm versions. The currently accessible runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against this final head.
+5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
+
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
 
@@ -113,7 +114,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** Absolute localhost aliases, cross-host sensitive-header removal, and malformed redirect locations; the branch also tightens fail-closed handling for malformed IPv6 classification inputs.
 - **Validation:** The prior local review recorded 141 focused Jest tests passing on the pinned PR head `cbe072c`. ESLint did not complete because the partial dependency installation failed during Windows module linking and Nx project discovery stalled. Full CI, typecheck, coverage, and E2E remain unverified; GitHub reports no Actions runs or check-runs for the merged head `43c317b`.
 
-### Follow-up remote-response resource limits — PR #4
+### Integrated remote-response resource limits — original PR #4, consolidated in PR #7
 
 - **Branch/head:** `security/bound-remote-response-memory-2026-10-20` / `75706f54100a52e10358dd3585c93e07aff81dc2`.
 - **Changes:** Limit remote M3U responses to 64 MiB; cap generic web-backend provider bodies at 128 MiB; cap plain XMLTV at 64 MiB, compressed XMLTV at 32 MiB, and gzip-expanded XMLTV at 64 MiB; apply the same M3U policy to Electron import and refresh.
@@ -122,7 +123,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Compatibility gate:** Verify representative large Xtream/Stalker catalog responses before merge; the 128 MiB generic cap may reject unusually large responses.
 - **Aggregate-memory risk to validate:** Per-response limits do not bound total memory across concurrent requests. The web transport buffers stream chunks, concatenates them, and creates a text/JSON representation; the reviewed host guard is a circuit breaker, not a general concurrency limiter. Verify a process-wide in-flight/byte budget under concurrent large responses, or explicitly retain this residual risk before presenting the change as complete memory-exhaustion protection.
 
-### Follow-up decoded XMLTV resource limits — PR #6
+### Integrated decoded XMLTV resource limits — original PR #6, consolidated in PR #7
 
 - **Branch/head:** `security/bound-epg-stream-memory-2026-10-20` / `ee27aef28bb4a99f6be674cd234b50d2fd5bf44f`.
 - **Changes:** Cap each decoded EPG source at 256 MiB after content-encoding and optional file-gzip layers, including authorized local files; cap each XMLTV text accumulator at 1 MiB of UTF-8 bytes.
@@ -138,7 +139,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** The Electron/SQLite harness exercises an open failure caused by a directory at the database file path, failure to initialize from a corrupt file, and a successful retry with `integrity_check` and schema verification.
 - **Validation:** The committed integration test has not run in this environment.
 
-### Follow-up PWA resource-bound review — provider targets
+### Integrated PWA provider-target bounds — original PR #7
 
 - **Current branch:** `fix/pwa-provider-target-memory-bound-2026-10-20`.
 - **Defect:** The self-hosted backend retained every distinct validated provider URL in an unbounded `Map<string, URL>`; the browser also cached registrations without a capacity bound. Long-lived or exposed instances could accumulate credential-bearing URLs and registration promises indefinitely.
@@ -147,3 +148,11 @@ Do not declare completion until the final commit has been checked against the in
 - **Documentation and release note:** `docs/architecture/pwa-self-hosted.md` and `.changes/security-provider-target-registry.md`.
 - **Validation:** These tests are authored but not executed. The working environment cannot clone the repository and the Actions API continues to return zero workflow runs/checks. Do not merge until the owning web-backend and web unit suites, typechecks, lint, and relevant E2E checks have run.
 - **Remaining admission risk:** The LRU bounds retained URL entries, but it does not by itself bound concurrent `POST /provider-targets` URL/DNS validations or the callers waiting on those validations. Stress-test large numbers of parallel unique URLs and add explicit backpressure/concurrency limits if this endpoint is exposed to untrusted clients.
+
+
+### Consolidation record — 2026-10-21
+
+- **Integration base:** `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e` (includes the merged SQLite initialization recovery PR #5).
+- **Included sources:** remote response caps / buffered provider handling from PR #4 (`75706f5`), decoded XMLTV and per-field caps from PR #6 (`ee27aef`), and LRU provider targets / browser-cache recovery from PR #7 (`e1dd5da`). The original heads remain reachable as integration commit parents to preserve provenance.
+- **Manual merge points:** Combined PR #4's response-size handling with PR #7's bounded provider target registry in `apps/web-backend/src/app/web-backend-app.ts`; added PR #4's redirect size-limit regression to the current `master` `validated-axios.spec.ts` without discarding the URL/credential redirect tests already merged from PR #2.
+- **Unresolved validation:** GitHub Actions/check-run APIs have returned no runs/statuses for the repository, and a clean local checkout is unavailable due DNS resolution failure. This is not a passing validation result. Aggregate response-memory and provider-target admission risks remain explicitly recorded above.

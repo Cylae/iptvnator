@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { closeDatabase, getDatabasePath, initDatabase } from '../connection';
@@ -98,6 +98,63 @@ async function main() {
     console.warn = (...args) => warnings.push(args);
     console.log = () => undefined;
     const databasePath = getDatabasePath();
+
+    if (fixture === 'retry-after-open-failure') {
+        mkdirSync(databasePath);
+        try {
+            await assert.rejects(
+                initDatabase({ readonly: true, skipTableCreation: true }),
+                (error: unknown) => {
+                    assert(error instanceof Error);
+                    assert.match(error.message, /open|SQLITE_CANTOPEN/i);
+                    return true;
+                }
+            );
+        } finally {
+            rmSync(databasePath, { recursive: true, force: true });
+        }
+
+        // Also exercise a failure after SQLite opens the path but initialization
+        // cannot use the corrupt file. Recovery must close the partial handle.
+        writeFileSync(databasePath, 'not a SQLite database');
+        await assert.rejects(initDatabase(), (error: unknown) => {
+            assert(error instanceof Error);
+            assert.match(
+                error.message,
+                /not a database|SQLITE_NOTADB|malformed|disk image/i
+            );
+            return true;
+        });
+        rmSync(databasePath, { force: true });
+
+        // A failed initialization must not leave initPromise rejected forever.
+        // After fixing the filesystem state, the next attempt should succeed.
+        try {
+            await initDatabase();
+            const sqlite = new Database(databasePath, { readonly: true });
+            try {
+                assert.deepEqual(sqlite.pragma('integrity_check'), [
+                    { integrity_check: 'ok' },
+                ]);
+                assert(
+                    sqlite
+                        .prepare(
+                            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'playlists'"
+                        )
+                        .get(),
+                    'Successful retry should create the current schema'
+                );
+            } finally {
+                sqlite.close();
+            }
+        } finally {
+            closeDatabase();
+        }
+
+        assert.deepEqual(warnings, [], 'Retry should initialize without migration warnings');
+        process.stdout.write('retry verified');
+        return;
+    }
 
     if (fixture === 'fresh') {
         await initDatabase();

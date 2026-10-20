@@ -51,4 +51,37 @@ describe('database initialization across skipped releases (#1580)', () => {
         },
         35_000
     );
+
+    it('can retry initialization after a transient SQLite open failure', () => {
+        const dataDir = mkdtempSync(join(tmpdir(), 'iptvnator-retry-'));
+        const electronPath = createRequire(__filename)('electron') as string;
+        try {
+            const output = execFileSync(
+                electronPath,
+                [
+                    '--import',
+                    'tsx',
+                    resolve(__dirname, 'testing/connection-upgrade.ts'),
+                    'retry-after-open-failure',
+                ],
+                {
+                    cwd: process.cwd(),
+                    encoding: 'utf8',
+                    timeout: 30_000,
+                    env: {
+                        ...process.env,
+                        ELECTRON_RUN_AS_NODE: '1',
+                        IPTVNATOR_E2E_DATA_DIR: dataDir,
+                        TSX_TSCONFIG_PATH: resolve(
+                            process.cwd(),
+                            'tsconfig.base.json'
+                        ),
+                    },
+                }
+            );
+            expect(output).toBe('retry verified');
+        } finally {
+            rmSync(dataDir, { recursive: true, force: true });
+        }
+    }, 35_000);
 });

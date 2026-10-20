@@ -11,6 +11,42 @@ const policy = {
     resolveHostname: resolvePublicHost,
 };
 
+describe('validated HTTP response size limits', () => {
+    it('accepts a non-stream response exactly at the byte limit', async () => {
+        const transport = new StubHttpClient();
+        transport.queueResponse('12345');
+
+        await expect(
+            new ValidatedHttpClient(policy, transport).get(
+                'https://provider.example/list',
+                { maxResponseBytes: 5 }
+            )
+        ).resolves.toMatchObject({ data: '12345' });
+    });
+
+    it('rejects a non-stream response over the byte limit as a failed provider body', async () => {
+        const transport = new StubHttpClient();
+        transport.queueResponse('123456');
+
+        await expect(
+            new ValidatedHttpClient(policy, transport).get(
+                'https://provider.example/list',
+                { maxResponseBytes: 5 }
+            )
+        ).rejects.toMatchObject({
+            initialResponded: true,
+            cause: {
+                message: 'Provider response body failed',
+                cause: {
+                    code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                    maxBytes: 5,
+                },
+                response: { status: 200 },
+            },
+        });
+    });
+});
+
 describe('validated HTTP redirect chain', () => {
     it.each([301, 302, 303, 307, 308])(
         'follows relative Location for %s, without replaying original params',
