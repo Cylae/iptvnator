@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** Consolidated integration in progress — database initialization recovery from PR #5 is merged into `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e`. The response-size changes from PR #4, XMLTV decoded-size changes from PR #6, and bounded PWA target registry from PR #7 are being integrated on `fix/pwa-provider-target-memory-bound-2026-10-20`. Full repository validation remains unavailable: local checkout cannot resolve `github.com`, and GitHub currently reports no Actions runs or commit checks. No final-head test/build success is claimed.
+**Status:** Consolidated draft PR #7 contains the response-size protections originally in PR #4, decoded XMLTV limits from PR #6, and bounded PWA provider-target state from PR #7. PR #4 and PR #6 are closed as superseded; their heads remain reachable from the integration commit. Database initialization recovery from PR #5 is merged into `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e`. Full repository validation remains unavailable: local checkout cannot resolve `github.com`, and GitHub currently reports no Actions runs or commit checks. No final-head test/build success is claimed.
 
 ## Initial inventory
 
@@ -74,10 +74,10 @@ Do not declare completion until the final commit has been checked against the in
 
 ### Current continuation plan
 
-1. Keep one integration PR (#7) containing the non-conflicting changes from #4, #6 and #7. PRs #4 and #6 will be closed as superseded only after their file changes and commit ancestry are preserved in the integration branch.
-2. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
-3. Resolve or explicitly accept the EPG partial-refresh data-integrity limitation before production release; an atomic source replacement design remains a release consideration.
-4. Validate the integration using the repository's declared Node/pnpm versions. The currently accessible runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against this final head.
+1. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
+2. Resolve or explicitly accept the EPG partial-refresh data-integrity limitation before production release; an atomic staging-and-publish design remains a release consideration.
+3. Add process-wide backpressure for concurrent provider-body buffering and concurrent provider-target URL/DNS validation before declaring the resource-bound work production-ready.
+4. Validate using the repository's declared Node/pnpm versions. The available runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against the final head.
 5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
 
 
@@ -153,6 +153,6 @@ Do not declare completion until the final commit has been checked against the in
 ### Consolidation record — 2026-10-21
 
 - **Integration base:** `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e` (includes the merged SQLite initialization recovery PR #5).
-- **Included sources:** remote response caps / buffered provider handling from PR #4 (`75706f5`), decoded XMLTV and per-field caps from PR #6 (`ee27aef`), and LRU provider targets / browser-cache recovery from PR #7 (`e1dd5da`). The original heads remain reachable as integration commit parents to preserve provenance.
+- **Included sources:** remote response caps / buffered provider handling from PR #4 (`75706f5`), decoded XMLTV and per-field caps from PR #6 (`ee27aef`), and LRU provider targets / browser-cache recovery from PR #7 (`e1dd5da`). The original heads remain reachable as integration commit parents to preserve provenance; PRs #4 and #6 have been closed as superseded.
 - **Manual merge points:** Combined PR #4's response-size handling with PR #7's bounded provider target registry in `apps/web-backend/src/app/web-backend-app.ts`; added PR #4's redirect size-limit regression to the current `master` `validated-axios.spec.ts` without discarding the URL/credential redirect tests already merged from PR #2.
 - **Unresolved validation:** GitHub Actions/check-run APIs have returned no runs/statuses for the repository, and a clean local checkout is unavailable due DNS resolution failure. This is not a passing validation result. Aggregate response-memory and provider-target admission risks remain explicitly recorded above.
