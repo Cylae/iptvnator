@@ -80,3 +80,12 @@ Do not declare completion until the final commit has been checked against the in
 
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
+
+
+### Follow-up verification — 2026-10-20
+
+- Tightened the version parser to require a semantic version at the beginning of the resolved key; malformed strings such as `nx@garbage23.2.1` can no longer pass by containing a valid-looking version substring.
+- Added regression coverage for malformed `nx` and `@nx/*` lockfile keys.
+- Executed an isolated Node.js harness against the validator logic for four cases: matching peer-qualified keys, real mismatches, malformed embedded versions, and peer-qualified prereleases. All four passed. This harness does not replace the repository's `node --test` suite.
+- Re-read the repository's CI workflow: it already includes `pnpm run deps:nx:validate`, typechecks, coverage checks, i18n drift, lint and release-note validation. However, GitHub currently reports no Actions runs for the branch/PR, so there is no remote CI result to rely on. The local clone remains blocked by DNS/network resolution, and the full suite has not run.
+- Reviewed the Electron renderer-navigation allowlist and credential-header scoping implementation. The inspected code explicitly limits external-browser launching to HTTP(S), packaged renderer navigation to the expected index file, and portal credentials to the exact configured origin; no new production defect was established from this read-only pass.
