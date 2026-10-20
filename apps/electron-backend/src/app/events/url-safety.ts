@@ -58,7 +58,10 @@ function normalizeHostname(hostname: string): string {
 }
 
 export function isLocalHostname(hostname: string): boolean {
-    return hostname === 'localhost' || hostname.endsWith('.localhost');
+    // DNS absolute names retain their trailing root dot in URL.hostname.
+    // Normalize it so localhost aliases cannot bypass the pre-resolution guard.
+    const normalized = normalizeHostname(hostname).replace(/\.+$/, '');
+    return normalized === 'localhost' || normalized.endsWith('.localhost');
 }
 
 const blockedIpv4 = new BlockList();
@@ -103,6 +106,7 @@ for (const [network, prefix] of [
 
 export function isPrivateOrReservedIpv6(address: string): boolean {
     const normalized = address.toLowerCase();
+    if (isIP(normalized) !== 6) return true;
 
     // IPv4-mapped IPv6 addresses inherit the IPv4 range policy.
     if (mappedIpv4.check(normalized, 'ipv6')) {

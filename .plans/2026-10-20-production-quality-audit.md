@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** In progress — the initial Nx and Electron SSRF fixes are merged into `master` at `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`. Follow-up URL/redirect hardening and SQLite initialization recovery are in separate open PRs. Bounded provider-target memory and PWA stale-target recovery are in progress. Full-suite validation remains blocked by the unavailable local network and absent GitHub Actions runs.
+**Status:** In progress — PR #1 (Nx lockfile validation) and PR #2 (SSRF address classification, localhost canonicalization, and redirect credential handling) are merged into `master` (current head `43c317bee1f2b00f2d4506b8cdbbd933e0e2cb25`). PRs #4–#7 cover remote response limits, database initialization recovery, decoded XMLTV limits, and bounded PWA provider-target state. These PRs remain unmerged and have no recorded repository CI results. GitHub Actions currently reports no workflow runs/checks, and this environment cannot resolve `github.com` for a local clone.
 
 ## Initial inventory
 
@@ -74,10 +74,11 @@ Do not declare completion until the final commit has been checked against the in
 
 ### Current continuation plan
 
-1. Restore a runnable checkout or an actual Actions execution path before claiming test, typecheck, lint, build, coverage, or packaging success.
-2. Keep concrete security, data-integrity, and resource-bound fixes isolated and regression-tested.
-3. Continue with high-risk network boundaries, database startup/migration paths, playlist parsing, portal authentication, playback, and packaging; log each evidenced defect and validation result.
-
+1. Restore a runnable checkout or an actual GitHub Actions execution path before claiming test, typecheck, lint, build, coverage, or packaging success.
+2. Run the exact affected project suites and typechecks for PRs #4–#7 on their current heads; standalone probes are supplemental only.
+3. Resolve the EPG partial-refresh data-integrity risk before release, and test the chosen behavior against a real SQLite database.
+4. Keep PR #7 based on current `master`; after its documentation conflict is reconciled, keep it open until the web-backend/web tests, lint, typechecks, coverage gates, and relevant PWA E2E checks have actual results.
+5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits referenced only in the previous session transcript as unimplemented until their patch or working tree is recovered and verified.
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
 
@@ -110,7 +111,23 @@ Do not declare completion until the final commit has been checked against the in
 - **PR:** [#2 — harden URL validation and redirect credentials](https://github.com/Cylae/iptvnator/pull/2).
 - **Changes:** Strip the DNS root dot before applying the localhost namespace denylist, remove Stalker `SN` and explicit `Host` headers on unsafe redirects, and convert malformed redirect destinations into a controlled policy error.
 - **Regression coverage:** Absolute localhost aliases, cross-host sensitive-header removal, and malformed redirect locations; the branch also tightens fail-closed handling for malformed IPv6 classification inputs.
-- **Validation:** The tests are authored but were not executed. GitHub reports zero workflow runs and zero check runs for the PR head; the full Jest, lint, typecheck, and E2E gates remain unverified.
+- **Validation:** The prior local review recorded 141 focused Jest tests passing on the pinned PR head `cbe072c`. ESLint did not complete because the partial dependency installation failed during Windows module linking and Nx project discovery stalled. Full CI, typecheck, coverage, and E2E remain unverified; GitHub reports no Actions runs or check-runs for the merged head `43c317b`.
+
+### Follow-up remote-response resource limits — PR #4
+
+- **Branch/head:** `security/bound-remote-response-memory-2026-10-20` / `75706f54100a52e10358dd3585c93e07aff81dc2`.
+- **Changes:** Limit remote M3U responses to 64 MiB; cap generic web-backend provider bodies at 128 MiB; cap plain XMLTV at 64 MiB, compressed XMLTV at 32 MiB, and gzip-expanded XMLTV at 64 MiB; apply the same M3U policy to Electron import and refresh.
+- **Regression coverage:** Exact byte limits, oversized streaming bodies, UTF-8 counting/BOM behavior, gzip expansion, redirect-hop configuration, and failed-2xx body handling.
+- **Validation:** The PR reports standalone probes only. The committed Jest suites, typecheck, lint, coverage, integration/E2E, and CI have not been executed for this head.
+- **Compatibility gate:** Verify representative large Xtream/Stalker catalog responses before merge; the 128 MiB generic cap may reject unusually large responses.
+
+### Follow-up decoded XMLTV resource limits — PR #6
+
+- **Branch/head:** `security/bound-epg-stream-memory-2026-10-20` / `ee27aef28bb4a99f6be674cd234b50d2fd5bf44f`.
+- **Changes:** Cap each decoded EPG source at 256 MiB after content-encoding and optional file-gzip layers, including authorized local files; cap each XMLTV text accumulator at 1 MiB of UTF-8 bytes.
+- **Regression coverage:** Exact decoded-size boundaries, gzip expansion rejection, stream teardown, and UTF-8 byte-aware text limits.
+- **Validation:** The PR reports an isolated Node harness only. Committed Jest tests, typecheck, lint, Electron integration tests, and CI remain unverified.
+- **Data-integrity gate:** EPG rows are committed in batches while parsing. A late stream, parse, or size-limit failure can leave a partially refreshed source. This is an acknowledged existing behavior in the PR. Resolve the risk with staging-and-publish semantics, or explicitly document and accept it, before treating the change as release-ready.
 
 ### Follow-up database reliability review
 
