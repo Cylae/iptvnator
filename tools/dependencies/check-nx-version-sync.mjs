@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 const EXACT_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const LOCKFILE_PACKAGE_VERSION = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?:\(|$)/;
 
 export function validateNxVersionSync({ packageJson, lockfile }) {
     const diagnostics = [];
@@ -45,7 +46,15 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
     for (const packageKey of Object.keys(lockfile.packages ?? {}).sort()) {
         const nxMatch = /^nx@(.+)$/.exec(packageKey);
         if (nxMatch) {
-            const resolvedVersion = nxMatch[1];
+            const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(nxMatch[1]);
+            if (!versionMatch) {
+                diagnostics.push(
+                    `pnpm-lock.yaml: could not parse resolved package key "${packageKey}"`
+                );
+                continue;
+            }
+
+            const resolvedVersion = versionMatch[1];
             if (resolvedVersion === expectedVersion) {
                 foundExpectedNx = true;
             } else {
@@ -57,12 +66,73 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
         }
 
         const officialPackageMatch = /^(@nx\/[^@]+)@(.+)$/.exec(packageKey);
-        if (
-            officialPackageMatch &&
-            officialPackageMatch[2] !== expectedVersion
-        ) {
+        if (!officialPackageMatch) continue;
+
+        const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(officialPackageMatch[2]);
+        if (!versionMatch) {
             diagnostics.push(
-                `pnpm-lock.yaml: resolved ${officialPackageMatch[1]}@${officialPackageMatch[2]} must match nx@${expectedVersion}`
+                `pnpm-lock.yaml: could not parse resolved package key "${packageKey}"`
+            );
+            continue;
+        }
+
+        if (versionMatch[1] !== expectedVersion) {
+            diagnostics.push(
+                `pnpm-lock.yaml: resolved ${officialPackageMatch[1]}@${versionMatch[1]} must match nx@${expectedVersion}`
+            );
+        }
+    }
+
+    if (!foundExpectedNx) {
+        diagnostics.push(
+            `pnpm-lock.yaml: expected nx@${expectedVersion} to be resolved`
+        );
+    }
+
+    return { diagnostics, expectedVersion };
+}
+
+const isMain =
+    process.argv[1] &&
+    resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+if (isMain) {
+    const rootDir = process.cwd();
+    const packageJson = JSON.parse(
+        await readFile(resolve(rootDir, 'package.json'), 'utf8')
+    );
+    const lockfile = parse(
+        await readFile(resolve(rootDir, 'pnpm-lock.yaml'), 'utf8')
+    );
+    const { diagnostics, expectedVersion } = validateNxVersionSync({
+        packageJson,
+        lockfile,
+    });
+
+    if (diagnostics.length > 0) {
+        console.error('Nx dependency version policy failed:');
+        for (const diagnostic of diagnostics) console.error(`- ${diagnostic}`);
+        process.exitCode = 1;
+    } else {
+        console.log(
+            `Nx dependency versions are synchronized at ${expectedVersion}.`
+        );
+    }
+}
+).exec(packageKey);
+        if (!officialPackageMatch) continue;
+
+        const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(officialPackageMatch[2]);
+        if (!versionMatch) {
+            diagnostics.push(
+                `pnpm-lock.yaml: could not parse resolved package key "${packageKey}"`
+            );
+            continue;
+        }
+
+        if (versionMatch[1] !== expectedVersion) {
+            diagnostics.push(
+                `pnpm-lock.yaml: resolved ${officialPackageMatch[1]}@${versionMatch[1]} must match nx@${expectedVersion}`
             );
         }
     }
