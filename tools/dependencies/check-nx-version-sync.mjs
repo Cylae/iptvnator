@@ -45,7 +45,7 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
     for (const packageKey of Object.keys(lockfile.packages ?? {}).sort()) {
         const nxMatch = /^nx@(.+)$/.exec(packageKey);
         if (nxMatch) {
-            const resolvedVersion = nxMatch[1];
+            const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(nxMatch[1]);\n            if (!versionMatch) {\n                diagnostics.push(`pnpm-lock.yaml: could not parse resolved package key "${packageKey}"`);\n                continue;\n            }\n            const resolvedVersion = versionMatch[1];
             if (resolvedVersion === expectedVersion) {
                 foundExpectedNx = true;
             } else {
@@ -62,7 +62,7 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
             officialPackageMatch[2] !== expectedVersion
         ) {
             diagnostics.push(
-                `pnpm-lock.yaml: resolved ${officialPackageMatch[1]}@${officialPackageMatch[2]} must match nx@${expectedVersion}`
+                `pnpm-lock.yaml: resolved ${officialPackageMatch[1]}@${officialVersionMatch[1]} must match nx@${expectedVersion}`
             );
         }
     }
