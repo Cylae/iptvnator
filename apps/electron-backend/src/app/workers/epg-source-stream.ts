@@ -12,7 +12,10 @@ import {
     getEpgResponseContentEncoding,
     shouldGunzipEpgResponse,
 } from './epg-response-utils';
-import { createDecodedEpgStream } from './epg-stream-decoder';
+import {
+    createDecodedEpgStream,
+    createEpgByteLimitTransform,
+} from './epg-stream-decoder';
 
 const loggerLabel = '[EPG Worker]';
 
@@ -76,6 +79,7 @@ async function openLocalEpgSource(filePath: string): Promise<Readable> {
     pipeline(
         createReadStream(filePath),
         createOptionalEpgGunzip(),
+        createEpgByteLimitTransform(),
         output,
         (error) => {
             if (error) output.destroy(error);

@@ -1,5 +1,8 @@
 import { SaxesParser, SaxesTagPlain } from 'saxes';
 
+/** Maximum UTF-8 bytes retained for any one XMLTV text field. */
+export const MAX_XMLTV_TEXT_FIELD_BYTES = 1024 * 1024;
+
 export interface ParsedTextValue {
     lang: string;
     value: string;
@@ -97,6 +100,7 @@ export class StreamingEpgParser {
     private currentChannel: Partial<ParsedChannel> | null = null;
     private currentProgram: Partial<ParsedProgram> | null = null;
     private currentTextContent = '';
+    private currentTextBytes = 0;
     private currentLang = '';
 
     // For nested elements
@@ -117,6 +121,7 @@ export class StreamingEpgParser {
         this.parser.on('opentag', (tag: SaxesTagPlain) => {
             this.elementStack.push(tag.name);
             this.currentTextContent = '';
+            this.currentTextBytes = 0;
 
             switch (tag.name) {
                 case 'channel':
@@ -205,6 +210,14 @@ export class StreamingEpgParser {
         });
 
         this.parser.on('text', (text: string) => {
+            const textBytes = Buffer.byteLength(text, 'utf8');
+            if (textBytes > MAX_XMLTV_TEXT_FIELD_BYTES - this.currentTextBytes) {
+                throw new Error(
+                    `XMLTV text field exceeded the ${MAX_XMLTV_TEXT_FIELD_BYTES}-byte limit`
+                );
+            }
+
+            this.currentTextBytes += textBytes;
             this.currentTextContent += text;
         });
 
