@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 const EXACT_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const LOCKFILE_PACKAGE_VERSION = /(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?:\(|$);
+const LOCKFILE_PACKAGE_VERSION = /^(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:\\(|$)/;
 
 export function validateNxVersionSync({ packageJson, lockfile }) {
     const diagnostics = [];
@@ -65,7 +65,7 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
             continue;
         }
 
-        const officialPackageMatch = new RegExp('^(@nx/[^@]+)@(.+)$').exec(packageKey);
+        const officialPackageMatch = /^(@nx\\/[^@]+)@(.+)$/.exec(packageKey);
         if (!officialPackageMatch) continue;
 
         const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(officialPackageMatch[2]);
