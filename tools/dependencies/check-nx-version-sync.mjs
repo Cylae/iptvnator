@@ -65,7 +65,7 @@ export function validateNxVersionSync({ packageJson, lockfile }) {
             continue;
         }
 
-        const officialPackageMatch = new RegExp('^(@nx/[^@]+)@(.+)
+        const officialPackageMatch = new RegExp('^(@nx/[^@]+)@(.+)$').exec(packageKey);
         if (!officialPackageMatch) continue;
 
         const versionMatch = LOCKFILE_PACKAGE_VERSION.exec(officialPackageMatch[2]);
