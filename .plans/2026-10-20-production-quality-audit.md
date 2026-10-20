@@ -120,6 +120,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** Exact byte limits, oversized streaming bodies, UTF-8 counting/BOM behavior, gzip expansion, redirect-hop configuration, and failed-2xx body handling.
 - **Validation:** The PR reports standalone probes only. The committed Jest suites, typecheck, lint, coverage, integration/E2E, and CI have not been executed for this head.
 - **Compatibility gate:** Verify representative large Xtream/Stalker catalog responses before merge; the 128 MiB generic cap may reject unusually large responses.
+- **Aggregate-memory risk to validate:** Per-response limits do not bound total memory across concurrent requests. The web transport buffers stream chunks, concatenates them, and creates a text/JSON representation; the reviewed host guard is a circuit breaker, not a general concurrency limiter. Verify a process-wide in-flight/byte budget under concurrent large responses, or explicitly retain this residual risk before presenting the change as complete memory-exhaustion protection.
 
 ### Follow-up decoded XMLTV resource limits — PR #6
 
