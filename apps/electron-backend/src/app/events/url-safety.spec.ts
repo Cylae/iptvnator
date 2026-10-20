@@ -36,7 +36,7 @@ describe('url-safety', () => {
             '1.1.1.1',
             '2001:4860:4860::8888',
             '2606:4700:4700::1111',
-        ])
+        ])(
             'allows public address %s',
             (ip) => {
                 expect(isPrivateOrReservedIp(ip)).toBe(false);
