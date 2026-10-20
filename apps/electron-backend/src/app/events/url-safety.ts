@@ -61,30 +61,28 @@ export function isLocalHostname(hostname: string): boolean {
     return hostname === 'localhost' || hostname.endsWith('.localhost');
 }
 
-export function isPrivateOrReservedIpv4(address: string): boolean {
-    const parts = address.split('.').map((part) => Number(part));
-    if (
-        parts.length !== 4 ||
-        parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-    ) {
-        return true;
-    }
+const blockedIpv4 = new BlockList();
+for (const [network, prefix] of [
+    ['0.0.0.0', 8],
+    ['10.0.0.0', 8],
+    ['100.64.0.0', 10],
+    ['127.0.0.0', 8],
+    ['169.254.0.0', 16],
+    ['172.16.0.0', 12],
+    ['192.0.0.0', 24],
+    ['192.0.2.0', 24],
+    ['192.88.99.0', 24],
+    ['192.168.0.0', 16],
+    ['198.18.0.0', 15],
+    ['198.51.100.0', 24],
+    ['203.0.113.0', 24],
+    ['224.0.0.0', 3],
+] as const) {
+    blockedIpv4.addSubnet(network, prefix, 'ipv4');
+}
 
-    const [first, second, third] = parts;
-    return (
-        first === 0 ||
-        first === 10 ||
-        first === 127 ||
-        (first === 100 && second >= 64 && second <= 127) ||
-        (first === 169 && second === 254) ||
-        (first === 172 && second >= 16 && second <= 31) ||
-        (first === 192 && second === 168) ||
-        (first === 192 && second === 0) ||
-        (first === 198 && (second === 18 || second === 19)) ||
-        (first === 198 && second === 51 && third === 100) ||
-        (first === 203 && second === 0 && third === 113) ||
-        first >= 224
-    );
+export function isPrivateOrReservedIpv4(address: string): boolean {
+    return isIP(address) !== 4 || blockedIpv4.check(address, 'ipv4');
 }
 
 function parseIpv6Words(address: string): number[] | null {
