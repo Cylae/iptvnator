@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** Initial repository inventory complete; behavioral audit and remediation pending.
+**Status:** In progress — two production/tooling defects addressed on the audit branch; full-suite validation blocked by the unavailable local network and absent GitHub Actions runs.
 
 ## Initial inventory
 
@@ -74,9 +74,9 @@ Do not declare completion until the final commit has been checked against the in
 
 ### Next steps
 
-1. Obtain a working execution path for the repository tests and CI.
-2. Verify this fix against the real lockfile and run its focused test suite.
-3. Continue the audit in security, data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
+1. Obtain a working execution path for the repository tests and CI; the API currently reports no workflow runs for the PR.
+2. Run the committed Nx validator and URL-safety test suites, then lint/typecheck the affected projects.
+3. Continue the audit in data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
 
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
@@ -97,3 +97,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Change:** Align Electron with the web backend's `node:net` `BlockList` ranges for IPv4 and IPv6. IPv4-mapped IPv6 addresses continue to inherit the underlying IPv4 classification; other IPv6 addresses are accepted only from global-unicast space and outside the listed special-purpose ranges.
 - **Regression coverage added:** IPv4 special-purpose range `192.88.99.0/24`, valid public `192.0.1.1`, IPv4-compatible `::7f00:1`, multicast `ff02::1`, IPv6 documentation `2001:db8::/32` and `3fff::/20`, 6to4 `2002::/16`, and known public IPv6 literals.
 - **Targeted verification:** A local Node.js harness exercising the same `BlockList` policy passed 28 focused cases (9 blocked IPv4, 4 allowed IPv4, 12 blocked IPv6, 3 allowed public/mapped IPv6). The committed Jest suite and full CI still have not run; do not treat the harness as a substitute.
+
+
+- **Release-note policy:** Added `.changes/security-ip-address-policy.md` for the runtime URL-safety change, matching the repository's release-note gate contract.
+- **Diff-review correction:** A final patch review caught over-escaped regex literals in the Nx validator edit before merge. Corrected both patterns and ran a standalone Node syntax/behavior check against the exact regex forms; the four-case isolated validator harness was also re-run against the corrected logic. This reinforces why the committed test suite remains a required gate.
