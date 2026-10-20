@@ -5,7 +5,6 @@ import {
     createPlaylistObject,
     getFilenameFromUrl,
 } from '@iptvnator/shared/m3u-utils';
-import { createPlaylistAgentFactory } from '../util/secure-https';
 import type {
     Playlist,
     PlaylistRefreshEvent,
@@ -22,7 +21,7 @@ import {
 } from '../util/security-errors';
 import { requestWithValidatedRedirects } from '../util/validated-axios';
 import { applyElectronNetworkDefaults } from '../util/network-defaults';
-import { PLAYLIST_FETCH_TIMEOUT_MS } from '../events/playlist-source';
+import { createPlaylistRequestConfig } from '../util/playlist-request-config';
 import {
     armWorkerPerformanceCapture,
     executeWithWorkerPerformanceCapture,
@@ -111,17 +110,11 @@ async function fetchPlaylistFromUrl(
     try {
         result = await requestWithValidatedRedirects<string>(
             payload.url!,
-            {
-                agentFactory: createPlaylistAgentFactory({
-                    trustedInsecureTlsHosts: payload.trustedInsecureTlsHosts,
-                }),
-                method: 'GET',
-                ...(payload.userAgent?.trim()
-                    ? { headers: { 'User-Agent': payload.userAgent.trim() } }
-                    : {}),
+            createPlaylistRequestConfig({
+                userAgent: payload.userAgent,
+                trustedInsecureTlsHosts: payload.trustedInsecureTlsHosts,
                 signal: controller.signal,
-                timeout: PLAYLIST_FETCH_TIMEOUT_MS,
-            },
+            }),
             { allowPrivateNetworks: true }
         );
     } catch (error) {

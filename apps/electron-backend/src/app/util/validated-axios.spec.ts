@@ -65,6 +65,31 @@ describe('requestWithValidatedRedirects', () => {
         axiosMock.mockReset();
     });
 
+    it('preserves response size limits across validated redirects', async () => {
+        const intermediate = new PassThrough();
+        axiosMock.mockResolvedValueOnce({
+            status: 302,
+            headers: { location: '/final' },
+            data: intermediate,
+        });
+        axiosMock.mockResolvedValueOnce({
+            status: 200,
+            headers: {},
+            data: '#EXTM3U',
+        });
+
+        await requestWithValidatedRedirects(
+            'https://example.com/start',
+            { maxContentLength: 1_024 },
+            { resolveHostname: publicResolver }
+        );
+
+        expect(
+            axiosMock.mock.calls.map(([config]) => config.maxContentLength)
+        ).toEqual([1_024, 1_024]);
+        expect(intermediate.destroyed).toBe(true);
+    });
+
     it('closes intermediate response streams before requesting the next hop', async () => {
         const intermediate = new PassThrough();
         const final = new PassThrough();

@@ -16,6 +16,8 @@ export interface WebBackendHttpGetOptions {
     readonly params?: Record<string, string>;
     readonly responseType?: 'arraybuffer';
     readonly timeout?: number;
+    /** Maximum bytes buffered for a final response body. Defaults to 128 MiB. */
+    readonly maxResponseBytes?: number;
     readonly signal?: AbortSignal;
     /**
      * Called once a hop's TCP connection is established. The host guard uses
@@ -75,19 +77,20 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
         rawUrl: string,
         options: WebBackendHttpGetOptions = {}
     ): Promise<WebBackendHttpResponse<T>> {
+        const { maxResponseBytes, ...requestOptions } = options;
         let currentUrl = rawUrl;
-        let params = options.params;
-        let headers = options.headers;
+        let params = requestOptions.params;
+        let headers = requestOptions.headers;
         let initialResponded = false;
         const visited = new Set<string>();
         try {
             for (let redirects = 0; ; redirects++) {
-                options.signal?.throwIfAborted();
+                requestOptions.signal?.throwIfAborted();
                 const target = await validateProviderUrl(
                     currentUrl,
                     this.policy
                 );
-                options.signal?.throwIfAborted();
+                requestOptions.signal?.throwIfAborted();
                 if ('message' in target) {
                     throw new ProviderRequestError(
                         initialResponded,
@@ -113,7 +116,7 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                 let response: WebBackendHttpResponse<T>;
                 try {
                     response = await this.transport.get<T>(target.url.href, {
-                        ...options,
+                        ...requestOptions,
                         headers,
                         params,
                         adapter: 'http',
@@ -126,15 +129,19 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                             REDIRECT_STATUSES.has(status) ||
                             (status >= 200 && status < 300),
                     });
+                    // Response headers prove that the provider answered, even if
+                    // the body later fails or exceeds its byte limit.
+                    initialResponded = true;
                     if (!REDIRECT_STATUSES.has(response.status)) {
                         try {
                             return {
                                 ...response,
                                 data: await readProviderBody(
                                     response.data,
-                                    options.responseType === 'arraybuffer',
-                                    options.timeout,
-                                    response.request?.socket ?? undefined
+                                    requestOptions.responseType === 'arraybuffer',
+                                    requestOptions.timeout,
+                                    response.request?.socket ?? undefined,
+                                    maxResponseBytes
                                 ),
                             };
                         } catch (error) {
@@ -153,7 +160,6 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                             );
                         }
                     }
-                    initialResponded = true;
                     discardProviderBody(response.data);
                 } catch (error) {
                     discardProviderErrorBody(error);

@@ -1,7 +1,6 @@
 import cors from 'cors';
 import express, { Express, Request, Response } from 'express';
 import { createHash } from 'node:crypto';
-import zlib from 'node:zlib';
 import epgParser from 'epg-parser';
 import parser from 'iptv-playlist-parser';
 import {
@@ -14,7 +13,10 @@ import {
     normalizeXtreamServerUrl,
     describeXtreamConnectionFailure,
 } from '@iptvnator/shared/interfaces';
-import { extractDrmFromRaw } from '@iptvnator/shared/m3u-utils';
+import {
+    extractDrmFromRaw,
+    MAX_REMOTE_M3U_BYTES,
+} from '@iptvnator/shared/m3u-utils';
 import {
     admitProviderRequest,
     observeProviderRequest,
@@ -37,6 +39,7 @@ import {
     WebBackendHttpClient,
 } from './validated-http-client';
 import { ProviderRequestError } from './provider-request-error';
+import { gunzipProviderBody } from './provider-response';
 import {
     ProviderUrlPolicy,
     providerUrlErrorBody,
@@ -70,6 +73,9 @@ export interface WebBackendAppOptions {
 }
 
 type ProviderTargetRegistry = Map<string, URL>;
+
+const MAX_PROVIDER_EPG_BYTES = 64 * 1024 * 1024;
+const MAX_COMPRESSED_PROVIDER_EPG_BYTES = 32 * 1024 * 1024;
 
 export function createWebBackendApp(
     options: WebBackendAppOptions = {}
@@ -548,6 +554,7 @@ async function handlePlaylistParse(options: {
     try {
         const response = await options.httpClient.get<string>(options.url, {
             timeout: PROVIDER_REQUEST_TIMEOUT_MS.playlist,
+            maxResponseBytes: MAX_REMOTE_M3U_BYTES,
             ...(options.userAgent
                 ? { headers: { 'User-Agent': options.userAgent } }
                 : {}),
@@ -572,18 +579,31 @@ async function handlePlaylistParse(options: {
         const providerError = (
             error instanceof ProviderRequestError ? error.cause : error
         ) as ProviderError;
-        if (providerError?.response?.statusText !== undefined) {
+        if (
+            providerError?.response?.statusText !== undefined &&
+            (providerError.response.status === undefined ||
+                providerError.response.status >= 400)
+        ) {
             return {
                 status: providerError.response.status ?? 500,
                 message: providerError.response.statusText,
             };
         }
         const code = collectProviderErrorCodes(providerError)[0];
+        const upstreamStatus = providerError?.response?.status;
         return {
-            status: providerError?.response?.status ?? 500,
-            message: code
-                ? `Error, something went wrong (${code})`
-                : 'Error, something went wrong',
+            status:
+                upstreamStatus === undefined
+                    ? 500
+                    : upstreamStatus >= 400
+                      ? upstreamStatus
+                      : 502,
+            message:
+                code === 'ERR_PROVIDER_RESPONSE_TOO_LARGE'
+                    ? 'Provider response exceeded the configured size limit'
+                    : code
+                      ? `Error, something went wrong (${code})`
+                      : 'Error, something went wrong',
             ...(code ? { code } : {}),
         };
     }
@@ -594,15 +614,23 @@ async function fetchEpgDataFromUrl(
     url: URL
 ): Promise<unknown> {
     const href = url.href;
+    const compressed = url.pathname.toLowerCase().endsWith('.gz');
     const response = await httpClient.get<ArrayBuffer | string>(href, {
         timeout: PROVIDER_REQUEST_TIMEOUT_MS.epg,
-        ...(url.pathname.endsWith('.gz')
-            ? { responseType: 'arraybuffer' }
-            : {}),
+        maxResponseBytes: compressed
+            ? MAX_COMPRESSED_PROVIDER_EPG_BYTES
+            : MAX_PROVIDER_EPG_BYTES,
+        ...(compressed ? { responseType: 'arraybuffer' } : {}),
     });
-    const xml = url.pathname.endsWith('.gz')
-        ? zlib.gunzipSync(Buffer.from(response.data as ArrayBuffer)).toString()
-        : response.data.toString();
+    let xml: string;
+    if (compressed) {
+        xml = gunzipProviderBody(
+            Buffer.from(response.data as ArrayBuffer),
+            MAX_PROVIDER_EPG_BYTES
+        ).toString();
+    } else {
+        xml = response.data.toString();
+    }
     return epgParser.parse(xml);
 }
 
