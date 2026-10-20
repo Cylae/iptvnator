@@ -8,7 +8,10 @@ import {
     createM3uImportPerformanceCapture,
     type M3uImportPerformanceCaptureRuntime,
 } from './playlist-import-performance';
-import { fetchPlaylistFromUrl } from './playlist-source';
+import {
+    fetchPlaylistFromUrl,
+    MAX_PLAYLIST_RESPONSE_BYTES,
+} from './playlist-source';
 
 const mockCreatePlaylistObject = jest.fn();
 const mockGetFilenameFromUrl = jest.fn();
@@ -100,6 +103,30 @@ describe('URL playlist import performance phases', () => {
         expect(runtime.createRequestId).not.toHaveBeenCalled();
         expect(runtime.readEpochMs).not.toHaveBeenCalled();
         expect(runtime.readMonotonicMs).not.toHaveBeenCalled();
+    });
+
+    it('caps the decoded body size of remote playlist downloads', async () => {
+        const url = 'https://playlist.example/large.m3u';
+        const playlist = { playlist: { items: [] }, title: 'Bounded' };
+
+        mockRequestWithValidatedRedirects.mockResolvedValue({
+            data: '#EXTM3U',
+            headers: {},
+        });
+        mockParse.mockReturnValue({ items: [] });
+        mockGetFilenameFromUrl.mockReturnValue('large.m3u');
+        mockCreatePlaylistObject.mockReturnValue(playlist);
+
+        await expect(fetchPlaylistFromUrl(url)).resolves.toBe(playlist);
+
+        expect(mockRequestWithValidatedRedirects).toHaveBeenCalledWith(
+            url,
+            expect.objectContaining({
+                maxContentLength: MAX_PLAYLIST_RESPONSE_BYTES,
+            }),
+            { allowPrivateNetworks: true }
+        );
+        expect(MAX_PLAYLIST_RESPONSE_BYTES).toBe(64 * 1024 * 1024);
     });
 
     it('emits ordered epoch-aligned pairs with durations and only byte/item metadata', async () => {

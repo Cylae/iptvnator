@@ -3,6 +3,8 @@ import {
     logProviderRequestFailure,
     normalizeProviderError,
 } from './provider-error';
+import { ProviderRequestError } from './provider-request-error';
+import { ProviderResponseTooLargeError } from './provider-response';
 
 function errorWithCode(message: string, code: string): Error {
     return Object.assign(new Error(message), { code });
@@ -100,6 +102,22 @@ describe('normalizeProviderError', () => {
             message: 'Bad Gateway',
             status: 502,
         });
+    });
+
+    it('normalizes oversized provider bodies to a controlled 502 response', () => {
+        const bodyError = new ProviderResponseTooLargeError(
+            64 * 1024 * 1024
+        );
+        const expected = {
+            message: 'Provider response exceeded the allowed size limit',
+            status: 502,
+            code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+        };
+
+        expect(normalizeProviderError(bodyError)).toEqual(expected);
+        expect(
+            normalizeProviderError(new ProviderRequestError(true, bodyError))
+        ).toEqual(expected);
     });
 });
 

@@ -194,6 +194,40 @@ describe('real axios validated transport', () => {
             });
         });
     });
+    it('aborts an endless real provider response after the decoded-byte limit', async () => {
+        let responseClosed!: () => void;
+        const closed = new Promise<void>((resolve) => {
+            responseClosed = resolve;
+        });
+        let clientAborted = false;
+        const provider = express().get('/oversized', (_req, res) => {
+            const timer = setInterval(() => {
+                res.write(Buffer.alloc(16 * 1024, 0x61));
+            }, 1);
+            res.on('close', () => {
+                clientAborted = !res.writableEnded;
+                clearInterval(timer);
+                responseClosed();
+            });
+        });
+
+        await withServer(provider, async (url) => {
+            await expect(
+                new ValidatedHttpClient(lan).get(`${url}/oversized`, {
+                    maxResponseBytes: 1024,
+                })
+            ).rejects.toMatchObject({
+                initialResponded: true,
+                cause: {
+                    code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                },
+            });
+
+            await closed;
+            expect(clientAborted).toBe(true);
+        });
+    });
+
     it.each(['truncated', 'invalid-gzip', 'timeout'])(
         'retains response evidence for a %s final body',
         async (kind) => {

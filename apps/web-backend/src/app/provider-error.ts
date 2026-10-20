@@ -10,6 +10,7 @@
  */
 
 import { ProviderRequestError } from './provider-request-error';
+import { ProviderResponseTooLargeError } from './provider-response';
 import { providerUrlErrorBody } from './provider-url-policy';
 
 export interface ProviderError extends Error {
@@ -81,6 +82,13 @@ function visitErrorNode(
 export function normalizeProviderError(
     error: unknown
 ): NormalizedProviderError {
+    if (error instanceof ProviderResponseTooLargeError) {
+        return {
+            message: 'Provider response exceeded the allowed size limit',
+            status: 502,
+            code: error.code,
+        };
+    }
     if (error instanceof ProviderRequestError) {
         if (error.policyError) return providerUrlErrorBody(error.policyError);
         return normalizeProviderError(error.cause);

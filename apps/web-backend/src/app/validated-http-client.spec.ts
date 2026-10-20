@@ -1,4 +1,5 @@
 import { Agent } from 'node:http';
+import { Readable } from 'node:stream';
 import { LookupFunction } from 'node:net';
 import { ValidatedHttpClient } from './validated-http-client';
 import {
@@ -12,6 +13,30 @@ const policy = {
 };
 
 describe('validated HTTP redirect chain', () => {
+    it('aborts an oversized streamed response and reports a controlled 502', async () => {
+        const transport = new StubHttpClient();
+        const body = Readable.from([
+            Buffer.from('1234'),
+            Buffer.from('56'),
+            Buffer.from('unread'),
+        ]);
+        transport.queueResponse(body);
+
+        await expect(
+            new ValidatedHttpClient(policy, transport).get(
+                'https://provider.example/playlist.m3u',
+                { maxResponseBytes: 5 }
+            )
+        ).rejects.toMatchObject({
+            initialResponded: true,
+            cause: {
+                code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+            },
+        });
+        expect(body.destroyed).toBe(true);
+        expect(transport.requests).toHaveLength(1);
+    });
+
     it.each([301, 302, 303, 307, 308])(
         'follows relative Location for %s, without replaying original params',
         async (status) => {

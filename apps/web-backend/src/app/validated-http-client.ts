@@ -3,6 +3,7 @@ import {
     discardProviderBody,
     discardProviderErrorBody,
     readProviderBody,
+    ProviderResponseTooLargeError,
 } from './provider-response';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Agent as HttpAgent, ClientRequest } from 'node:http';
@@ -15,6 +16,8 @@ export interface WebBackendHttpGetOptions {
     readonly headers?: Record<string, string>;
     readonly params?: Record<string, string>;
     readonly responseType?: 'arraybuffer';
+    /** Maximum final response body size in decoded bytes. */
+    readonly maxResponseBytes?: number;
     readonly timeout?: number;
     readonly signal?: AbortSignal;
     /**
@@ -75,6 +78,7 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
         rawUrl: string,
         options: WebBackendHttpGetOptions = {}
     ): Promise<WebBackendHttpResponse<T>> {
+        const { maxResponseBytes, ...transportOptions } = options;
         let currentUrl = rawUrl;
         let params = options.params;
         let headers = options.headers;
@@ -113,7 +117,7 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                 let response: WebBackendHttpResponse<T>;
                 try {
                     response = await this.transport.get<T>(target.url.href, {
-                        ...options,
+                        ...transportOptions,
                         headers,
                         params,
                         adapter: 'http',
@@ -134,11 +138,18 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                                     response.data,
                                     options.responseType === 'arraybuffer',
                                     options.timeout,
-                                    response.request?.socket ?? undefined
+                                    response.request?.socket ?? undefined,
+                                    maxResponseBytes
                                 ),
                             };
                         } catch (error) {
                             if (axios.isCancel(error)) throw error;
+                            if (error instanceof ProviderResponseTooLargeError) {
+                                // The endpoint answered, but the body is too
+                                // large to buffer safely. Preserve response
+                                // evidence without misclassifying this as URL policy.
+                                throw new ProviderRequestError(true, error);
+                            }
                             // A broken/stalled body still proves the endpoint
                             // answered. Preserve buffered axios error semantics.
                             throw Object.assign(

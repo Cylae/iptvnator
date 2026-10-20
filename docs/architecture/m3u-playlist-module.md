@@ -315,6 +315,10 @@ dead source must never stall startup (issue #931):
   `playlist-source.ts`). Without it a host that accepts the connection and then goes
   silent keeps the request pending forever. Redirects are followed one hop at a time,
   so each hop is bounded separately.
+- Remote playlist responses are capped at `MAX_PLAYLIST_RESPONSE_BYTES` (64 MiB
+  of decoded response bytes). Axios enforces the ceiling for each redirect hop,
+  preventing a server that streams indefinitely or lies about `Content-Length`
+  from exhausting application memory. Local files keep their existing import path.
 - Auto-update refreshes at most `AUTO_UPDATE_CONCURRENCY` (3) playlists at a time.
   Sequential refreshes let one slow host delay every remaining playlist; an unbounded
   fan-out would download and parse arbitrarily many large M3U files in the main

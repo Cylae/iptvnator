@@ -1,7 +1,6 @@
 import cors from 'cors';
 import express, { Express, Request, Response } from 'express';
 import { createHash } from 'node:crypto';
-import zlib from 'node:zlib';
 import epgParser from 'epg-parser';
 import parser from 'iptv-playlist-parser';
 import {
@@ -37,6 +36,11 @@ import {
     WebBackendHttpClient,
 } from './validated-http-client';
 import { ProviderRequestError } from './provider-request-error';
+import {
+    MAX_PROVIDER_RESPONSE_BYTES,
+    decodeXmltvResponse,
+    ProviderResponseTooLargeError,
+} from './provider-response';
 import {
     ProviderUrlPolicy,
     providerUrlErrorBody,
@@ -548,6 +552,7 @@ async function handlePlaylistParse(options: {
     try {
         const response = await options.httpClient.get<string>(options.url, {
             timeout: PROVIDER_REQUEST_TIMEOUT_MS.playlist,
+            maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES,
             ...(options.userAgent
                 ? { headers: { 'User-Agent': options.userAgent } }
                 : {}),
@@ -566,6 +571,15 @@ async function handlePlaylistParse(options: {
         };
     } catch (error) {
         logProviderRequestFailure({ error, route: '/parse', url: options.url });
+        if (
+            error instanceof ProviderRequestError &&
+            error.cause instanceof ProviderResponseTooLargeError
+        ) {
+            return {
+                status: 502,
+                message: 'Provider response exceeded the allowed size limit',
+            };
+        }
         if (error instanceof ProviderRequestError && error.policyError) {
             return providerUrlErrorBody(error.policyError);
         }
@@ -596,13 +610,15 @@ async function fetchEpgDataFromUrl(
     const href = url.href;
     const response = await httpClient.get<ArrayBuffer | string>(href, {
         timeout: PROVIDER_REQUEST_TIMEOUT_MS.epg,
+        maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES,
         ...(url.pathname.endsWith('.gz')
             ? { responseType: 'arraybuffer' }
             : {}),
     });
-    const xml = url.pathname.endsWith('.gz')
-        ? zlib.gunzipSync(Buffer.from(response.data as ArrayBuffer)).toString()
-        : response.data.toString();
+    const xml = decodeXmltvResponse(
+        response.data,
+        url.pathname.endsWith('.gz')
+    );
     return epgParser.parse(xml);
 }
 

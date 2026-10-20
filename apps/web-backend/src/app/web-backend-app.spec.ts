@@ -1,4 +1,9 @@
 import { createWebBackendApp } from './web-backend-app';
+import { ProviderRequestError } from './provider-request-error';
+import {
+    MAX_PROVIDER_RESPONSE_BYTES,
+    ProviderResponseTooLargeError,
+} from './provider-response';
 import {
     registerProviderTarget,
     resolvePublicHost,
@@ -785,6 +790,47 @@ https://stream.example/live.m3u8`);
                         message: 'Error, something went wrong (ETIMEDOUT)',
                         status: 500,
                         code: 'ETIMEDOUT',
+                    });
+                }
+            );
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('returns a controlled 502 when a provider playlist exceeds the body limit', async () => {
+        const httpClient = new StubHttpClient();
+        jest.spyOn(httpClient, 'get').mockRejectedValue(
+            new ProviderRequestError(
+                true,
+                new ProviderResponseTooLargeError(
+                    MAX_PROVIDER_RESPONSE_BYTES
+                )
+            )
+        );
+        const errorSpy = jest
+            .spyOn(console, 'error')
+            .mockImplementation(() => undefined);
+
+        try {
+            await withServer(
+                createWebBackendApp({
+                    httpClient,
+                    resolveHostname: resolvePublicHost,
+                }),
+                async (baseUrl) => {
+                    const targetId = await registerProviderTarget(
+                        baseUrl,
+                        'https://provider.example/large.m3u'
+                    );
+                    const response = await fetch(
+                        `${baseUrl}/parse?targetId=${targetId}`
+                    );
+
+                    expect(response.status).toBe(502);
+                    await expect(response.json()).resolves.toEqual({
+                        message: 'Provider response exceeded the allowed size limit',
+                        status: 502,
                     });
                 }
             );

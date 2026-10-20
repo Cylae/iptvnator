@@ -155,6 +155,15 @@ so `provider-response.ts` keeps that timer active until consumption finishes.
 A body failure preserves received HTTP status evidence; cancellation remains
 inconclusive before any redirect.
 
+Buffered provider responses are bounded by `MAX_PROVIDER_RESPONSE_BYTES` (64
+MiB of decoded bytes). The limit counts bytes actually read from the response
+stream, not the untrusted `Content-Length` header; an oversized stream is
+destroyed immediately and returned as a controlled bad-gateway error. Standalone
+gzip XMLTV payloads are checked again after decompression, with the same 64 MiB
+output ceiling, to prevent compressed files from expanding without bound.
+The Electron remote M3U import uses the matching 64 MiB Axios
+`maxContentLength` limit on every redirect hop.
+
 Every DNS answer must be a valid permitted IP. Mixed public/private answers
 fail closed. The strict policy rejects private/reserved IPv4, IPv4-mapped private
 IPv6, and IPv6 outside global unicast `2000::/3`, plus protocol-assignment,

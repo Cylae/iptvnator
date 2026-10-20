@@ -30,6 +30,9 @@ export interface PlaylistFetchOptions {
  */
 export const PLAYLIST_FETCH_TIMEOUT_MS = 30000;
 
+/** Maximum decoded M3U body size accepted from a remote playlist URL. */
+export const MAX_PLAYLIST_RESPONSE_BYTES = 64 * 1024 * 1024;
+
 function countPlaylistItems(value: unknown): number | undefined {
     try {
         if (typeof value !== 'object' || value === null) {
@@ -100,6 +103,7 @@ export async function fetchPlaylistFromUrl(
                 method: 'GET',
                 ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
                 timeout: PLAYLIST_FETCH_TIMEOUT_MS,
+                maxContentLength: MAX_PLAYLIST_RESPONSE_BYTES,
             },
             { allowPrivateNetworks: true }
         );
