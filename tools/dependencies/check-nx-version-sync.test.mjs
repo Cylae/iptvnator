@@ -223,7 +223,9 @@ test('accepts matching Nx packages with pnpm peer-context suffixes', async (t) =
     );
 });
 
-test('rejects a mismatched Nx version even when the lockfile key has peer context', async (t) => {
+test(
+    'rejects a mismatched Nx version even when the lockfile key has peer context',
+    async (t) => {
     const rootDir = await createFixture(t, {
         packageJson: {
             devDependencies: {
@@ -246,7 +248,9 @@ test('rejects a mismatched Nx version even when the lockfile key has peer contex
     );
 });
 
-test('rejects malformed Nx lockfile versions instead of matching an embedded semver', async (t) => {
+test(
+    'rejects malformed Nx lockfile versions instead of matching an embedded semver',
+    async (t) => {
     const rootDir = await createFixture(t, {
         packageJson: {
             devDependencies: {
