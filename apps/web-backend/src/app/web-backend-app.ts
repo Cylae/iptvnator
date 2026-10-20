@@ -1,6 +1,5 @@
 import cors from 'cors';
 import express, { Express, Request, Response } from 'express';
-import { createHash } from 'node:crypto';
 import zlib from 'node:zlib';
 import epgParser from 'epg-parser';
 import parser from 'iptv-playlist-parser';
@@ -37,6 +36,7 @@ import {
     WebBackendHttpClient,
 } from './validated-http-client';
 import { ProviderRequestError } from './provider-request-error';
+import { ProviderTargetRegistry } from './provider-target-registry';
 import {
     ProviderUrlPolicy,
     providerUrlErrorBody,
@@ -69,8 +69,6 @@ export interface WebBackendAppOptions {
     readonly runtimeBackendUrl?: string;
 }
 
-type ProviderTargetRegistry = Map<string, URL>;
-
 export function createWebBackendApp(
     options: WebBackendAppOptions = {}
 ): Express {
@@ -100,7 +98,7 @@ export function createWebBackendApp(
         providerUrlPolicy,
         options.httpClient
     );
-    const providerTargets: ProviderTargetRegistry = new Map();
+    const providerTargets = new ProviderTargetRegistry();
 
     const corsMiddleware = cors({
         origin(origin, callback) {
@@ -154,8 +152,7 @@ export function createWebBackendApp(
                 return;
             }
 
-            const targetId = createProviderTargetId(result.url);
-            providerTargets.set(targetId, result.url);
+            const targetId = providerTargets.register(result.url);
             res.json({ targetId });
         }
     );
@@ -454,7 +451,7 @@ function getRegisteredProviderUrl(
         return null;
     }
 
-    const targetUrl = providerTargets.get(targetId);
+    const targetUrl = providerTargets.resolve(targetId);
     if (!targetUrl) {
         res.status(404).json({
             message: 'Provider target not found',
@@ -464,10 +461,6 @@ function getRegisteredProviderUrl(
     }
 
     return targetUrl;
-}
-
-function createProviderTargetId(url: URL): string {
-    return createHash('sha256').update(url.href).digest('hex');
 }
 
 function isPrivateNetworkProxyAllowed(): boolean {

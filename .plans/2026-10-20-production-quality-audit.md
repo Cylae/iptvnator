@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** In progress — two production/tooling defects addressed on the audit branch; full-suite validation blocked by the unavailable local network and absent GitHub Actions runs.
+**Status:** In progress — the initial Nx and Electron SSRF fixes are merged into `master` at `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`. Follow-up URL/redirect hardening and SQLite initialization recovery are in separate open PRs. Bounded provider-target memory and PWA stale-target recovery are in progress. Full-suite validation remains blocked by the unavailable local network and absent GitHub Actions runs.
 
 ## Initial inventory
 
@@ -69,14 +69,14 @@ Do not declare completion until the final commit has been checked against the in
 - **Evidence:** The current `pnpm-lock.yaml` contains both plain and peer-qualified entries for the same Nx packages.
 - **Change:** Extract the semantic version prefix from lockfile keys while still rejecting real version mismatches; add regression tests for matching peer-qualified entries and a mismatched peer-qualified official package.
 - **Files changed:** `tools/dependencies/check-nx-version-sync.mjs` and `tools/dependencies/check-nx-version-sync.test.mjs`.
-- **Validation status:** Regression tests are authored but not yet executed. The environment cannot resolve `github.com` for a local clone, and the draft PR currently has no visible Actions runs or commit status checks. Do not treat the fix as verified until executable checks return results.
-- **Review vehicle:** Draft PR #1, `https://github.com/Cylae/iptvnator/pull/1`, remains open so the change is isolated from `master` while the audit continues.
+- **Validation status at the time:** Regression tests were authored but the repository suite had not executed. The local clone could not resolve `github.com`; GitHub reported no Actions runs or commit checks. The isolated Node harness results above are not substitutes for the committed suite.
+- **Review vehicle:** PR #1 was merged to `master` as `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`.
 
-### Next steps
+### Current continuation plan
 
-1. Obtain a working execution path for the repository tests and CI; the API currently reports no workflow runs for the PR.
-2. Run the committed Nx validator and URL-safety test suites, then lint/typecheck the affected projects.
-3. Continue the audit in data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
+1. Restore a runnable checkout or an actual Actions execution path before claiming test, typecheck, lint, build, coverage, or packaging success.
+2. Keep concrete security, data-integrity, and resource-bound fixes isolated and regression-tested.
+3. Continue with high-risk network boundaries, database startup/migration paths, playlist parsing, portal authentication, playback, and packaging; log each evidenced defect and validation result.
 
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
@@ -103,3 +103,28 @@ Do not declare completion until the final commit has been checked against the in
 - **Diff-review correction:** A final patch review caught over-escaped regex literals in the Nx validator edit before merge. Corrected both patterns and ran a standalone Node syntax/behavior check against the exact regex forms; the four-case isolated validator harness was also re-run against the corrected logic. This reinforces why the committed test suite remains a required gate.
 
 - **Implementation refinement:** Replaced the handwritten IPv6 word parser with `BlockList` handling for IPv4-mapped IPv6 as well, reducing bespoke address-parsing code and matching the web backend's approach more closely. Added a public IPv4-mapped IPv6 regression case to ensure the hardening does not block mapped public addresses.
+
+
+### Follow-up security review — URL and redirect handling
+
+- **PR:** [#2 — harden URL validation and redirect credentials](https://github.com/Cylae/iptvnator/pull/2).
+- **Changes:** Strip the DNS root dot before applying the localhost namespace denylist, remove Stalker `SN` and explicit `Host` headers on unsafe redirects, and convert malformed redirect destinations into a controlled policy error.
+- **Regression coverage:** Absolute localhost aliases, cross-host sensitive-header removal, and malformed redirect locations; the branch also tightens fail-closed handling for malformed IPv6 classification inputs.
+- **Validation:** The tests are authored but were not executed. GitHub reports zero workflow runs and zero check runs for the PR head; the full Jest, lint, typecheck, and E2E gates remain unverified.
+
+### Follow-up database reliability review
+
+- **PR:** [#5 — recover after initialization failures](https://github.com/Cylae/iptvnator/pull/5).
+- **Defect:** A rejected module-scoped database initialization promise could remain cached after SQLite open or initialization failure, preventing later calls from recovering without restarting the application.
+- **Changes:** Close and clear a partially initialized SQLite handle and reset the cached promise only when the failing attempt still owns the initialization state. This ownership check prevents an older rejection handler from clearing a newer retry.
+- **Regression coverage:** The Electron/SQLite harness exercises an open failure caused by a directory at the database file path, failure to initialize from a corrupt file, and a successful retry with `integrity_check` and schema verification.
+- **Validation:** The committed integration test has not run in this environment.
+
+### Follow-up PWA resource-bound review — provider targets
+
+- **Current branch:** `fix/pwa-provider-target-memory-bound-2026-10-20`.
+- **Defect:** The self-hosted backend retained every distinct validated provider URL in an unbounded `Map<string, URL>`; the browser also cached registrations without a capacity bound. Long-lived or exposed instances could accumulate credential-bearing URLs and registration promises indefinitely.
+- **Changes:** Add an LRU backend registry capped at 1,024 URLs and a browser registration cache capped at 256 entries. The browser cache key includes both backend URL and provider URL. A missing-target response triggers one registration refresh and one retry, but unrelated/upstream 404s are not retried. The request flow uses the identity of the registration promise rather than the deterministic target ID to avoid invalidating a concurrent refresh.
+- **Regression coverage:** Bounded LRU behavior, active-target recency, duplicate registration, URL object isolation, invalid capacity values, shared in-flight registration, browser cache eviction, per-backend cache separation, and recovery for playlist, Xtream, and Stalker requests.
+- **Documentation and release note:** `docs/architecture/pwa-self-hosted.md` and `.changes/security-provider-target-registry.md`.
+- **Validation:** These tests are authored but not executed. The working environment cannot clone the repository and the Actions API continues to return zero workflow runs/checks. Do not merge until the owning web-backend and web unit suites, typechecks, lint, and relevant E2E checks have run.
