@@ -59,6 +59,8 @@ describe('provider URL policy', () => {
         'invalid',
         'http://localhost.',
         'http://sub.localhost',
+        'http://localhost..',
+        'http://metadata.localhost..',
     ])('rejects %s', async (url) => {
         await expect(validateProviderUrl(url, policy)).resolves.toMatchObject({
             status: 400,

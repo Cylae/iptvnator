@@ -122,6 +122,29 @@ describe('requestWithValidatedRedirects', () => {
         expect(axiosMock).toHaveBeenCalledTimes(1);
     });
 
+    it(
+        'rejects malformed redirect locations as policy errors without a second request',
+        async () => {
+            axiosMock.mockResolvedValueOnce({
+                status: 302,
+                headers: { location: 'http://[invalid' },
+            });
+
+            await expect(
+                requestWithValidatedRedirects(
+                    'https://example.com/playlist.m3u',
+                    { method: 'GET' },
+                    { resolveHostname: publicResolver }
+                )
+            ).rejects.toMatchObject({
+                name: 'UnsafeUrlError',
+                message: 'Redirect location is not a valid URL',
+                status: 502,
+            });
+            expect(axiosMock).toHaveBeenCalledTimes(1);
+        }
+    );
+
     it('pins the socket lookup to the address validated by the URL policy', async () => {
         axiosMock.mockResolvedValueOnce({
             status: 200,
@@ -502,6 +525,9 @@ describe('requestWithValidatedRedirects', () => {
                 headers: {
                     Authorization: 'Bearer secret',
                     Cookie: 'session=secret',
+                    'Proxy-Authorization': 'proxy-secret',
+                    SN: 'portal-serial-secret',
+                    Host: 'example.com',
                     Accept: 'text/plain',
                 },
                 method: 'GET',
@@ -515,6 +541,9 @@ describe('requestWithValidatedRedirects', () => {
         });
         expect(redirectedConfig.headers).not.toHaveProperty('Authorization');
         expect(redirectedConfig.headers).not.toHaveProperty('Cookie');
+        expect(redirectedConfig.headers).not.toHaveProperty('Proxy-Authorization');
+        expect(redirectedConfig.headers).not.toHaveProperty('SN');
+        expect(redirectedConfig.headers).not.toHaveProperty('Host');
     });
 
     it('keeps sensitive headers when a redirect upgrades the scheme on the same host', async () => {

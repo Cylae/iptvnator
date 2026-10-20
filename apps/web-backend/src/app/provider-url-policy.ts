@@ -54,7 +54,7 @@ export async function validateProviderUrl(
         };
     }
     const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    const local = hostname.replace(/\.$/, '');
+    const local = hostname.replace(/\.+$/, '');
     if (
         !policy.allowPrivateNetworkTargets &&
         (local === 'localhost' ||
