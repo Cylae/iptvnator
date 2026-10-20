@@ -59,3 +59,21 @@
 ## Completion gate
 
 Do not declare completion until the final commit has been checked against the intended base, all relevant automated checks have results, regression coverage exists for each behavioral fix, and remaining platform/tooling limitations are documented. A green test suite is necessary but not sufficient: review the final diff for unintended behavior, data loss, security regressions, and weakened verification.
+
+
+## Execution log
+
+### 2026-10-20 — First verified tooling defect
+
+- **Defect:** `tools/dependencies/check-nx-version-sync.mjs` compared complete pnpm lockfile package keys to the expected Nx version. pnpm v9 keys can include peer-context suffixes, for example `@nx/angular@23.2.1(e86c4a4fb085aa7a209327ce2b2f688a)` and `nx@23.2.1(@swc/core@1.16.1)`. The validator interpreted the suffix as part of the version and reported a false mismatch.
+- **Evidence:** The current `pnpm-lock.yaml` contains both plain and peer-qualified entries for the same Nx packages.
+- **Change:** Extract the semantic version prefix from lockfile keys while still rejecting real version mismatches; add regression tests for matching peer-qualified entries and a mismatched peer-qualified official package.
+- **Files changed:** `tools/dependencies/check-nx-version-sync.mjs` and `tools/dependencies/check-nx-version-sync.test.mjs`.
+- **Validation status:** Regression tests are authored but not yet executed. The environment cannot resolve `github.com` for a local clone, and the draft PR currently has no visible Actions runs or commit status checks. Do not treat the fix as verified until executable checks return results.
+- **Review vehicle:** Draft PR #1, `https://github.com/Cylae/iptvnator/pull/1`, remains open so the change is isolated from `master` while the audit continues.
+
+### Next steps
+
+1. Obtain a working execution path for the repository tests and CI.
+2. Verify this fix against the real lockfile and run its focused test suite.
+3. Continue the audit in security, data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
