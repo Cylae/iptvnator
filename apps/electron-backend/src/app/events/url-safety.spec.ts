@@ -21,11 +21,22 @@ describe('url-safety', () => {
             '::ffff:127.0.0.1',
             '::ffff:7f00:1',
             '::ffff:c0a8:101',
+            '::7f00:1',
+            'ff02::1',
+            '2001:db8::1',
+            '2002:c0a8:101::1',
+            '3fff::1',
         ])('flags %s as private/reserved', (ip) => {
             expect(isPrivateOrReservedIp(ip)).toBe(true);
         });
 
-        it.each(['93.184.216.34', '8.8.8.8', '1.1.1.1'])(
+        it.each([
+            '93.184.216.34',
+            '8.8.8.8',
+            '1.1.1.1',
+            '2001:4860:4860::8888',
+            '2606:4700:4700::1111',
+        ])
             'allows public address %s',
             (ip) => {
                 expect(isPrivateOrReservedIp(ip)).toBe(false);
@@ -67,6 +78,18 @@ describe('url-safety', () => {
                 assertRemoteUrlAllowed(
                     'http://169.254.169.254/latest/meta-data'
                 )
+            ).rejects.toBeInstanceOf(UnsafeUrlError);
+        });
+
+        it('rejects IPv6 documentation addresses', async () => {
+            await expect(
+                assertRemoteUrlAllowed('https://[2001:db8::1]/playlist.m3u')
+            ).rejects.toBeInstanceOf(UnsafeUrlError);
+        });
+
+        it('rejects IPv4-compatible IPv6 loopback literals', async () => {
+            await expect(
+                assertRemoteUrlAllowed('http://[::127.0.0.1]/admin')
             ).rejects.toBeInstanceOf(UnsafeUrlError);
         });
 
