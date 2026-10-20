@@ -1,5 +1,5 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 
 const PRIVATE_NETWORK_URLS_ENV = 'IPTVNATOR_ALLOW_PRIVATE_NETWORK_URLS';
 
@@ -162,21 +162,35 @@ function getMappedIpv4Address(address: string): string | null {
     ].join('.');
 }
 
+const globallyRoutableIpv6 = new BlockList();
+globallyRoutableIpv6.addSubnet('2000::', 3, 'ipv6');
+
+const reservedIpv6 = new BlockList();
+for (const [network, prefix] of [
+    ['2001::', 23], // Protocol assignments, including Teredo and benchmarking.
+    ['2001:db8::', 32], // Documentation.
+    ['2002::', 16], // Deprecated 6to4 transition mechanism.
+    ['3fff::', 20], // Documentation.
+] as const) {
+    reservedIpv6.addSubnet(network, prefix, 'ipv6');
+}
+
 export function isPrivateOrReservedIpv6(address: string): boolean {
     const normalized = address.toLowerCase();
-    if (
-        normalized === '::' ||
-        normalized === '::1' ||
-        normalized.startsWith('fc') ||
-        normalized.startsWith('fd') ||
-        // Link-local fe80::/10 spans fe80:: through febf:: (3rd nibble 8-b).
-        /^fe[89ab]/.test(normalized)
-    ) {
-        return true;
+    const mappedIpv4 = getMappedIpv4Address(normalized);
+
+    // Mapped addresses inherit the policy of their embedded IPv4 address.
+    if (mappedIpv4) {
+        return isPrivateOrReservedIpv4(mappedIpv4);
     }
 
-    const mappedIpv4 = getMappedIpv4Address(normalized);
-    return mappedIpv4 ? isPrivateOrReservedIpv4(mappedIpv4) : false;
+    // Accept only global-unicast space, then exclude special-purpose blocks.
+    // This also rejects IPv4-compatible ::/96, multicast, unspecified and
+    // link-local addresses that are not globally routable.
+    return (
+        !globallyRoutableIpv6.check(normalized, 'ipv6') ||
+        reservedIpv6.check(normalized, 'ipv6')
+    );
 }
 
 export function isPrivateOrReservedIp(address: string): boolean {
