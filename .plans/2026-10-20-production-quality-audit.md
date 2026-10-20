@@ -77,3 +77,6 @@ Do not declare completion until the final commit has been checked against the in
 1. Obtain a working execution path for the repository tests and CI.
 2. Verify this fix against the real lockfile and run its focused test suite.
 3. Continue the audit in security, data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
+
+
+- **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
