@@ -244,7 +244,7 @@ test(
         assert.equal(result.status, 1);
         assert.match(
             result.stderr,
-            /resolved @nx\\/angular@23\\.2\\.0 must match nx@23\\.2\\.1/
+            /resolved @nx\/angular@23\.2\.0 must match nx@23\.2\.1/
         );
     }
 );
@@ -270,11 +270,11 @@ test(
         assert.equal(result.status, 1);
         assert.match(
             result.stderr,
-            /could not parse resolved package key "nx@garbage23\\.2\\.1"/
+            /could not parse resolved package key "nx@garbage23\.2\.1"/
         );
         assert.match(
             result.stderr,
-            /expected nx@23\\.2\\.1 to be resolved/
+            /expected nx@23\.2\.1 to be resolved/
         );
     }
 );
