@@ -1217,7 +1217,7 @@ export async function initDatabase(
     if (db) return db;
     if (initPromise) return initPromise;
 
-    initPromise = (async () => {
+    const initialization = (async () => {
         const filePath = getDatabasePath();
         sqlite = new Database(filePath, {
             readonly,
@@ -1256,8 +1256,29 @@ export async function initDatabase(
         db = database;
         return database;
     })();
+    initPromise = initialization;
 
-    return initPromise;
+    try {
+        return await initialization;
+    } catch (error) {
+        // Do not leave a rejected singleton promise behind. A transient path,
+        // permission, or migration failure must not poison every later retry.
+        const failedConnection = sqlite;
+        sqlite = null;
+        db = null;
+        if (initPromise === initialization) {
+            initPromise = null;
+        }
+
+        // Preserve the initialization error if SQLite also fails to close.
+        try {
+            failedConnection?.close();
+        } catch {
+            // The original initialization failure is the actionable error.
+        }
+
+        throw error;
+    }
 }
 
 /**

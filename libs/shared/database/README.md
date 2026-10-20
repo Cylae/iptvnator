@@ -54,6 +54,9 @@ When changing initialization:
   in the earlier schema creation phase.
 - Preserve existing data and make migrations safe on repeated startup. Record
   completion only after the associated migration succeeds.
+- If initialization fails, close any partially opened connection and clear the
+  cached initialization promise. After the underlying cause is corrected, a
+  later call must be able to retry; cover this behavior in an isolated process.
 - Exercise the actual initialization path with real SQLite and historical
   schema fixtures containing representative playlists, favorites, history, and
   playback positions. Verify both schema changes and preservation of those rows;
