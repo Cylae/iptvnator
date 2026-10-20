@@ -117,6 +117,9 @@ export class ValidatedHttpClient implements WebBackendHttpClient {
                 try {
                     response = await this.transport.get<T>(target.url.href, {
                         ...requestOptions,
+                        ...(maxResponseBytes === undefined
+                            ? {}
+                            : { maxResponseBytes }),
                         headers,
                         params,
                         adapter: 'http',
