@@ -245,3 +245,24 @@ test('rejects a mismatched Nx version even when the lockfile key has peer contex
         /resolved @nx\/angular@23\.2\.0 must match nx@23\.2\.1/
     );
 });
+
+test('rejects malformed Nx lockfile versions instead of matching an embedded semver', async (t) => {
+    const rootDir = await createFixture(t, {
+        packageJson: {
+            devDependencies: {
+                '@nx/angular': '23.2.1',
+                nx: '23.2.1',
+            },
+        },
+        packages: {
+            '@nx/angular@garbage23.2.1': {},
+            'nx@garbage23.2.1': {},
+        },
+    });
+
+    const result = runValidator(rootDir);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /could not parse resolved package key "nx@garbage23\.2\.1"/);
+    assert.match(result.stderr, /expected nx@23\.2\.1 to be resolved/);
+});
