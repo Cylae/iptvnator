@@ -101,3 +101,5 @@ Do not declare completion until the final commit has been checked against the in
 
 - **Release-note policy:** Added `.changes/security-ip-address-policy.md` for the runtime URL-safety change, matching the repository's release-note gate contract.
 - **Diff-review correction:** A final patch review caught over-escaped regex literals in the Nx validator edit before merge. Corrected both patterns and ran a standalone Node syntax/behavior check against the exact regex forms; the four-case isolated validator harness was also re-run against the corrected logic. This reinforces why the committed test suite remains a required gate.
+
+- **Implementation refinement:** Replaced the handwritten IPv6 word parser with `BlockList` handling for IPv4-mapped IPv6 as well, reducing bespoke address-parsing code and matching the web backend's approach more closely. Added a public IPv4-mapped IPv6 regression case to ensure the hardening does not block mapped public addresses.
