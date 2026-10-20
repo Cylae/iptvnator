@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** In progress — two production/tooling defects addressed on the audit branch; full-suite validation blocked by the unavailable local network and absent GitHub Actions runs.
+**Status:** In progress — Nx lockfile validation and Electron IP classification hardening are merged into `master`; a follow-up URL canonicalization fix is under review in PR #2. GitHub currently reports no Actions runs or check-runs, and the local environment cannot resolve `github.com` for a repository clone.
 
 ## Initial inventory
 
@@ -70,13 +70,13 @@ Do not declare completion until the final commit has been checked against the in
 - **Change:** Extract the semantic version prefix from lockfile keys while still rejecting real version mismatches; add regression tests for matching peer-qualified entries and a mismatched peer-qualified official package.
 - **Files changed:** `tools/dependencies/check-nx-version-sync.mjs` and `tools/dependencies/check-nx-version-sync.test.mjs`.
 - **Validation status:** Regression tests are authored but not yet executed. The environment cannot resolve `github.com` for a local clone, and the draft PR currently has no visible Actions runs or commit status checks. Do not treat the fix as verified until executable checks return results.
-- **Review vehicle:** Draft PR #1, `https://github.com/Cylae/iptvnator/pull/1`, remains open so the change is isolated from `master` while the audit continues.
+- **Review vehicle:** PR #1 (`https://github.com/Cylae/iptvnator/pull/1`) was merged into `master` at `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`. The original test suites and full CI were not executed before merge; keep that validation gap visible.
 
 ### Next steps
 
-1. Obtain a working execution path for the repository tests and CI; the API currently reports no workflow runs for the PR.
-2. Run the committed Nx validator and URL-safety test suites, then lint/typecheck the affected projects.
-3. Continue the audit in data integrity, source compatibility, playback, UI, performance, and packaging domains; log each evidenced defect and its regression proof.
+1. Restore a trustworthy execution path for repository checks. The GitHub API currently reports zero workflow runs and zero check-runs for both the merged commit and PR #2; a local clone is blocked by DNS/network resolution.
+2. Run the committed Nx validator, Electron URL safety, web provider URL policy, typechecks, lint, coverage, and packaging checks before treating the changes as verified.
+3. Continue the audit across migrations, networking, provider compatibility, playback, UI, performance, and packaging, logging each evidenced defect and its regression coverage.
 
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
@@ -103,3 +103,12 @@ Do not declare completion until the final commit has been checked against the in
 - **Diff-review correction:** A final patch review caught over-escaped regex literals in the Nx validator edit before merge. Corrected both patterns and ran a standalone Node syntax/behavior check against the exact regex forms; the four-case isolated validator harness was also re-run against the corrected logic. This reinforces why the committed test suite remains a required gate.
 
 - **Implementation refinement:** Replaced the handwritten IPv6 word parser with `BlockList` handling for IPv4-mapped IPv6 as well, reducing bespoke address-parsing code and matching the web backend's approach more closely. Added a public IPv4-mapped IPv6 regression case to ensure the hardening does not block mapped public addresses.
+
+
+### Follow-up security pass — absolute localhost names
+
+- **Defect:** The Electron hostname guard compared the raw hostname to `localhost` and checked the `.localhost` suffix without removing the DNS root dot. Absolute names such as `localhost.` and `metadata.localhost.` bypassed the pre-resolution name check. Although strict DNS-answer validation still rejects private answers, the early guard should reject local namespaces independently of resolver behavior.
+- **Change:** Normalize DNS root dots in both the Electron and web-backend local-host checks. Repeated trailing dots are also normalized to a local name, so malformed aliases such as `localhost..` fail closed rather than reaching DNS resolution.
+- **Regression tests:** Added Electron cases for `localhost.`, `metadata.localhost.`, `localhost..`, and `metadata.localhost..`, asserting the resolver is never called. Added the repeated-dot cases to the web-backend URL-policy suite.
+- **Validation:** An isolated Node.js harness passed eight hostname-canonicalization assertions, including allowed non-local controls. This validates the normalization behavior only; the committed Jest tests, typechecks, lint, full coverage and CI remain unexecuted.
+- **Review vehicle:** PR #2 — https://github.com/Cylae/iptvnator/pull/2.

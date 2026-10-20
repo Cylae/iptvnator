@@ -1,30 +1,56 @@
 import {
     assertRemoteUrlAllowed,
     isPrivateOrReservedIp,
+    isPrivateOrReservedIpv6,
     isPrivateNetworkUrlAccessAllowed,
     UnsafeUrlError,
     validateRemoteUrl,
 } from './url-safety';
 
 describe('url-safety', () => {
+    describe('isPrivateOrReservedIpv6', () => {
+        it.each(['', 'not-an-ip', '127.0.0.1'])(
+            'treats invalid IPv6 classifier input %j as reserved',
+            (address) => {
+                expect(isPrivateOrReservedIpv6(address)).toBe(true);
+            }
+        );
+    });
+
     describe('isPrivateOrReservedIp', () => {
         it.each([
-            '127.0.0.1',
+            '0.0.0.0',
             '10.0.0.5',
-            '192.168.1.1',
-            '172.16.0.1',
+            '100.64.0.1',
+            '127.0.0.1',
             '169.254.169.254',
+            '172.16.0.1',
+            '192.0.0.1',
+            '192.0.2.1',
             '192.88.99.1',
+            '192.168.1.1',
+            '198.18.0.1',
+            '198.51.100.1',
+            '203.0.113.1',
+            '224.0.0.1',
+            '255.255.255.255',
+            '::',
             '::1',
+            'fc00::1',
             'fd00::1',
             'fe80::1',
             'febf::1',
+            'ff02::1',
             '::ffff:127.0.0.1',
             '::ffff:7f00:1',
+            '::ffff:a00:1',
             '::ffff:c0a8:101',
+            '0:0:0:0:0:ffff:a9fe:a9fe',
             '::7f00:1',
-            'ff02::1',
+            '64:ff9b::a00:1',
+            '2001::1',
             '2001:db8::1',
+            '2002:7f00:1::',
             '2002:c0a8:101::1',
             '3fff::1',
         ])('flags %s as private/reserved', (ip) => {
@@ -76,6 +102,23 @@ describe('url-safety', () => {
             ).rejects.toBeInstanceOf(UnsafeUrlError);
         });
 
+        it.each([
+            'http://localhost./admin',
+            'http://metadata.localhost./admin',
+            'http://localhost../admin',
+            'http://metadata.localhost../admin',
+        ])(
+            'rejects absolute localhost hostname %s before DNS resolution',
+            async (rawUrl) => {
+                const resolveHostname = jest.fn(async () => ['93.184.216.34']);
+
+                await expect(
+                    assertRemoteUrlAllowed(rawUrl, { resolveHostname })
+                ).rejects.toBeInstanceOf(UnsafeUrlError);
+                expect(resolveHostname).not.toHaveBeenCalled();
+            }
+        );
+
         it('rejects the cloud metadata address', async () => {
             await expect(
                 assertRemoteUrlAllowed(
@@ -109,6 +152,31 @@ describe('url-safety', () => {
                 })
             ).rejects.toBeInstanceOf(UnsafeUrlError);
         });
+
+        it.each([
+            { label: 'empty answer', addresses: [] },
+            {
+                label: 'IPv4 public plus IPv4 private',
+                addresses: ['93.184.216.34', '127.0.0.1'],
+            },
+            {
+                label: 'IPv4 public plus IPv6 reserved',
+                addresses: ['93.184.216.34', '2001:db8::1'],
+            },
+            {
+                label: 'malformed DNS answer',
+                addresses: ['93.184.216.34', 'not-an-ip-address'],
+            },
+        ])(
+            'rejects $label',
+            async ({ addresses }) => {
+                await expect(
+                    assertRemoteUrlAllowed('https://mixed.example', {
+                        resolveHostname: async () => addresses,
+                    })
+                ).rejects.toBeInstanceOf(UnsafeUrlError);
+            }
+        );
 
         it('allows a public URL', async () => {
             const target = await validateRemoteUrl(

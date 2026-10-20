@@ -21,6 +21,7 @@ const SENSITIVE_HEADERS = new Set([
     'authorization',
     'cookie',
     'proxy-authorization',
+    'sn',
 ]);
 
 export interface ValidatedRequestAgentFactory {
@@ -66,7 +67,11 @@ function copyHeadersWithoutSensitiveValues(
     const sanitized: RawAxiosRequestHeaders = {};
 
     for (const [name, value] of Object.entries(source)) {
-        if (!SENSITIVE_HEADERS.has(name.toLowerCase())) {
+        const normalizedName = name.toLowerCase();
+        if (
+            !SENSITIVE_HEADERS.has(normalizedName) &&
+            normalizedName !== 'host'
+        ) {
             sanitized[name] = value;
         }
     }
@@ -294,7 +299,12 @@ export async function requestWithValidatedRedirects<T = unknown>(
             throw new UnsafeUrlError('Too many redirects', 502);
         }
 
-        const nextUrl = new URL(location, validatedUrl);
+        let nextUrl: URL;
+        try {
+            nextUrl = new URL(location, validatedUrl);
+        } catch {
+            throw new UnsafeUrlError('Redirect location is not a valid URL', 502);
+        }
         const method = requestConfig.method?.toUpperCase();
         const shouldRewriteToGet =
             (response.status === 303 && method !== 'HEAD') ||
@@ -311,10 +321,10 @@ export async function requestWithValidatedRedirects<T = unknown>(
         // routinely redirect between schemes and ports of the same host
         // (http -> https upgrades, port moves), and stripping the session
         // cookie/token there breaks the portal outright (#1158). Two hops do
-        // lose Authorization/Cookie/basic auth/params: a *different* host
-        // (credentials never leak to third parties) and a same-host
-        // https -> http downgrade (a session obtained over TLS is never
-        // replayed in cleartext).
+        // lose Authorization/Cookie/SN/basic auth/params and explicit Host:
+        // a *different* host (portal identity never leaks to third parties)
+        // and a same-host https -> http downgrade (a session obtained over
+        // TLS is never replayed in cleartext).
         const isCredentialUnsafeRedirect =
             nextUrl.hostname !== validatedUrl.hostname ||
             (validatedUrl.protocol === 'https:' &&
