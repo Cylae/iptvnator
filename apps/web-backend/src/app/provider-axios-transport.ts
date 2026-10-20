@@ -46,7 +46,7 @@ export class ProviderAxiosTransport implements WebBackendHttpClient {
         agent.options.servername = isIP(hostname) ? '' : hostname;
         agent.options.checkServerIdentity = (_name, certificate) =>
             checkServerIdentity(hostname, certificate);
-        const { onConnect, ...axiosOptions } = options;
+        const { onConnect, maxResponseBytes: _maxResponseBytes, ...axiosOptions } = options;
         const response = await axios.get<T>(root, {
             ...axiosOptions,
             params: undefined,
