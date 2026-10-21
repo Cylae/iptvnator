@@ -1,6 +1,7 @@
 import {
     closeSync,
     createWriteStream,
+    type Dirent,
     lstatSync,
     mkdtempSync,
     openSync,
@@ -57,7 +58,7 @@ export function cleanupStaleEpgSpools(
         throw new RangeError('maxAgeMs must be a positive safe integer');
     }
 
-    let entries;
+    let entries: Dirent[];
     try {
         entries = readdirSync(rootDirectory, { withFileTypes: true });
     } catch {
