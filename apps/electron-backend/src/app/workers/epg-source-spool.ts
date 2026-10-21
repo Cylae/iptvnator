@@ -1,9 +1,11 @@
 import {
     closeSync,
     createWriteStream,
+    lstatSync,
     mkdtempSync,
     openSync,
     readSync,
+    readdirSync,
     rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,7 +35,75 @@ export type EpgTransactionRunner = <T>(operation: () => T) => T;
 
 const EMPTY_EPG_SOURCE_MESSAGE =
     'EPG parse produced 0 channels — feed may be unreachable or unsupported';
+export const EPG_SPOOL_DIRECTORY_PREFIX = 'iptvnator-epg-import-';
+export const DEFAULT_STALE_EPG_SPOOL_AGE_MS = 24 * 60 * 60 * 1000;
 const SPOOL_BUFFER_BYTES = 64 * 1024;
+
+/**
+ * Best-effort cleanup for spools left by a forcibly terminated worker.
+ * Only direct child directories with the application-specific prefix qualify.
+ * Both directory and file timestamps must be stale, so active spool writes
+ * refresh the grace period.
+ */
+export function cleanupStaleEpgSpools(
+    rootDirectory = tmpdir(),
+    now = Date.now(),
+    maxAgeMs = DEFAULT_STALE_EPG_SPOOL_AGE_MS
+): number {
+    if (!Number.isFinite(now)) {
+        throw new RangeError('now must be a finite timestamp');
+    }
+    if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 1) {
+        throw new RangeError('maxAgeMs must be a positive safe integer');
+    }
+
+    let entries;
+    try {
+        entries = readdirSync(rootDirectory, { withFileTypes: true });
+    } catch {
+        return 0;
+    }
+
+    let removed = 0;
+    for (const entry of entries) {
+        if (
+            !entry.isDirectory() ||
+            !entry.name.startsWith(EPG_SPOOL_DIRECTORY_PREFIX)
+        ) {
+            continue;
+        }
+
+        const directoryPath = join(rootDirectory, entry.name);
+        try {
+            const directoryInfo = lstatSync(directoryPath);
+            if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) {
+                continue;
+            }
+
+            let lastActivity = directoryInfo.mtimeMs;
+            const spoolPath = join(directoryPath, 'source.xmltv');
+            try {
+                const spoolInfo = lstatSync(spoolPath);
+                if (spoolInfo.isSymbolicLink()) continue;
+                if (spoolInfo.isFile()) {
+                    lastActivity = Math.max(lastActivity, spoolInfo.mtimeMs);
+                }
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                    continue;
+                }
+            }
+
+            if (now - lastActivity <= maxAgeMs) continue;
+            rmSync(directoryPath, { recursive: true, force: true });
+            removed++;
+        } catch {
+            // Cleanup is best-effort; a stale temp file must not block a new import.
+        }
+    }
+
+    return removed;
+}
 
 /**
  * Spool and validate the entire decoded source before changing active guide
@@ -45,8 +115,10 @@ export async function importEpgSourceAtomically(
     callbacks: EpgSourceImportCallbacks,
     runInTransaction: EpgTransactionRunner
 ): Promise<EpgSourceImportStats> {
+    const temporaryRoot = tmpdir();
+    cleanupStaleEpgSpools(temporaryRoot);
     const temporaryDirectory = mkdtempSync(
-        join(tmpdir(), 'iptvnator-epg-import-')
+        join(temporaryRoot, EPG_SPOOL_DIRECTORY_PREFIX)
     );
     const spoolPath = join(temporaryDirectory, 'source.xmltv');
 

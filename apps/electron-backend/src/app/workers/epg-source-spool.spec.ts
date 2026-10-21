@@ -1,5 +1,18 @@
+import {
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    rmSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { Readable } from 'node:stream';
 import {
+    cleanupStaleEpgSpools,
+    DEFAULT_STALE_EPG_SPOOL_AGE_MS,
+    EPG_SPOOL_DIRECTORY_PREFIX,
     importEpgSourceAtomically,
     type EpgSourceImportCallbacks,
     type EpgTransactionRunner,
@@ -136,5 +149,42 @@ describe('importEpgSourceAtomically', () => {
 
         expect(transactionCalls).toBe(1);
         expect(storedRows).toEqual(['previous-guide']);
+    });
+});
+
+describe('cleanupStaleEpgSpools', () => {
+    it('removes only stale IPTVnator spools and preserves active or unrelated directories', () => {
+        const root = mkdtempSync(
+            join(tmpdir(), 'iptvnator-spool-cleanup-test-')
+        );
+        const stalePath = join(root, `${EPG_SPOOL_DIRECTORY_PREFIX}stale`);
+        const activePath = join(root, `${EPG_SPOOL_DIRECTORY_PREFIX}active`);
+        const unrelatedPath = join(root, 'other-application-cache');
+        const now = Date.now();
+        const oldTime = new Date(now - DEFAULT_STALE_EPG_SPOOL_AGE_MS - 1000);
+
+        try {
+            for (const directory of [stalePath, activePath, unrelatedPath]) {
+                mkdirSync(directory);
+                writeFileSync(join(directory, 'source.xmltv'), 'fixture');
+            }
+            utimesSync(join(stalePath, 'source.xmltv'), oldTime, oldTime);
+            utimesSync(stalePath, oldTime, oldTime);
+            utimesSync(join(unrelatedPath, 'source.xmltv'), oldTime, oldTime);
+            utimesSync(unrelatedPath, oldTime, oldTime);
+
+            expect(cleanupStaleEpgSpools(root, now)).toBe(1);
+            expect(readdirSync(root).sort()).toEqual(
+                [basename(activePath), basename(unrelatedPath)].sort()
+            );
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it('rejects invalid cleanup ages', () => {
+        expect(() => cleanupStaleEpgSpools(tmpdir(), Date.now(), 0)).toThrow(
+            'maxAgeMs must be a positive safe integer'
+        );
     });
 });

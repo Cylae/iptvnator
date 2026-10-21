@@ -75,7 +75,7 @@ Do not declare completion until the final commit has been checked against the in
 ### Current continuation plan
 
 1. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
-2. Validate the new atomic EPG spool/replay implementation against real SQLite integration tests and supported Windows/macOS/Linux runtimes. Confirm temporary-disk capacity and startup cleanup behavior for worker termination before release.
+2. Validate the new atomic EPG spool/replay implementation against real SQLite integration tests and supported Windows/macOS/Linux runtimes. Confirm temporary-disk capacity and stale-spool cleanup behavior under Windows/macOS/Linux and concurrent worker scenarios before release.
 3. Add a process-wide budget for concurrent buffered provider response bodies; provider-target URL/DNS admission is now capped at 16 active validations per process and the route regression has been authored, but remains unexecuted.
 4. Validate using the repository's declared Node/pnpm versions. The available runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against the final head.
 5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
@@ -160,3 +160,5 @@ Do not declare completion until the final commit has been checked against the in
 - **Atomic EPG import update:** Added a private 256 MiB-bounded decoded-source spool, SAX preflight and UTF-8-safe replay in a single outer SQLite transaction. Added rollback/error-classification regression tests. Repository tests remain unexecuted.
 
 - **Aggregate provider-body budget added:** Shared reservation budget caps streamed response chunks, temporary concat copies and UTF-16 decoding buffers at 512 MiB per process. Budget exhaustion now aborts the stream and normalizes to HTTP 503. Tests cover budget accounting, aggregate reservations, concat peaks and error normalization; repository execution remains blocked.
+
+- **Stale EPG spool cleanup added:** the next import performs a best-effort 24-hour sweep limited to private IPTVnator spool directories; symlink directories/files are ignored and cleanup errors do not block imports. Cross-platform cleanup tests are authored but unexecuted.
