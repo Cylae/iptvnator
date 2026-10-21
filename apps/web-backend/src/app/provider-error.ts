@@ -106,7 +106,15 @@ export function normalizeProviderError(
         }
     }
 
-    const code = collectProviderErrorCodes(error)[0];
+    const codes = collectProviderErrorCodes(error);
+    if (codes.includes('ERR_PROVIDER_RESPONSE_MEMORY_LIMIT')) {
+        return {
+            message: 'Concurrent provider response buffering capacity is exhausted',
+            status: 503,
+            code: 'ERR_PROVIDER_RESPONSE_MEMORY_LIMIT',
+        };
+    }
+    const code = codes[0];
     const message =
         code === 'ERR_PROVIDER_RESPONSE_TOO_LARGE'
             ? 'Provider response exceeded the configured size limit'
