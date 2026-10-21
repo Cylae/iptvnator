@@ -161,20 +161,39 @@ export async function readProviderBody<T>(
     if (timeout && socket) socket.setTimeout(timeout, onTimeout);
     try {
         for await (const chunk of data) {
-            const buffer = Buffer.from(chunk);
-            if (buffer.byteLength > maxResponseBytes - bytesRead) {
+            let buffer: Buffer | undefined;
+            let chunkByteLength: number;
+            if (Buffer.isBuffer(chunk)) {
+                // Incoming HTTP Buffer chunks are retained directly rather than
+                // copied before the aggregate reservation has been acquired.
+                buffer = chunk;
+                chunkByteLength = chunk.byteLength;
+            } else if (typeof chunk === 'string') {
+                chunkByteLength = Buffer.byteLength(chunk);
+            } else if (ArrayBuffer.isView(chunk)) {
+                chunkByteLength = chunk.byteLength;
+            } else {
+                // Axios response streams normally yield Buffers. Keep a
+                // compatibility fallback for custom transports with other
+                // chunk shapes.
+                buffer = Buffer.from(chunk);
+                chunkByteLength = buffer.byteLength;
+            }
+
+            if (chunkByteLength > maxResponseBytes - bytesRead) {
                 data.destroy();
                 throw new ProviderResponseTooLargeError(maxResponseBytes);
             }
-            if (!memoryBudget.tryReserve(buffer.byteLength)) {
+            if (!memoryBudget.tryReserve(chunkByteLength)) {
                 data.destroy();
                 throw new ProviderResponseMemoryLimitError(
                     memoryBudget.maxBytes,
                     memoryBudget.reservedBytes,
-                    buffer.byteLength
+                    chunkByteLength
                 );
             }
-            reservedBytes += buffer.byteLength;
+            reservedBytes += chunkByteLength;
+            if (!buffer) buffer = Buffer.from(chunk);
             bytesRead += buffer.byteLength;
             chunks.push(buffer);
         }

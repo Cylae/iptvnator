@@ -125,6 +125,22 @@ describe('readProviderBody response size limits', () => {
         expect(budget.reservedBytes).toBe(0);
     });
 
+    it('checks large string chunks before converting them into buffers', async () => {
+        const budget = new ProviderResponseMemoryBudget(4);
+        const source = Readable.from(['12345']);
+
+        await expect(
+            readProviderBody(source, true, undefined, undefined, 8, budget)
+        ).rejects.toMatchObject({
+            code: 'ERR_PROVIDER_RESPONSE_MEMORY_LIMIT',
+            requestedBytes: 5,
+            reservedBytes: 0,
+        });
+
+        expect(source.destroyed).toBe(true);
+        expect(budget.reservedBytes).toBe(0);
+    });
+
     it('reserves the concatenation peak before allocating the output buffer', async () => {
         const budget = new ProviderResponseMemoryBudget(12);
         const source = Readable.from([Buffer.from('12345678')]);
