@@ -344,9 +344,26 @@ https://stream.example/live.m3u8`);
                         })
                 );
 
-                // Give the server time to schedule the whole burst while
-                // the resolver is held at the configured admission capacity.
-                await new Promise<void>((resolve) => setTimeout(resolve, 25));
+                // Do not rely on a fixed sleep to decide whether the
+                // overflow request reached the server. Only a 503 can settle
+                // this race before the held DNS operations are released.
+                const overloadRequest = Promise.race(
+                    requests.map(async (request) => {
+                        const response = await request;
+                        return response.status === 503
+                            ? response
+                            : new Promise<Response>(() => undefined);
+                    })
+                );
+                let overloadTimer: ReturnType<typeof setTimeout> | undefined;
+                const overloadResponse = await Promise.race([
+                    overloadRequest,
+                    new Promise<null>((resolve) => {
+                        overloadTimer = setTimeout(() => resolve(null), 2_000);
+                    }),
+                ]);
+                if (overloadTimer) clearTimeout(overloadTimer);
+
                 const observedActive = activeValidations;
                 const observedHosts = resolvedHosts.size;
                 releaseDns();
@@ -355,6 +372,7 @@ https://stream.example/live.m3u8`);
                 const statuses = responses.map((response) => response.status);
                 await Promise.all(responses.map((response) => response.json()));
 
+                expect(overloadResponse?.status).toBe(503);
                 expect(observedActive).toBe(
                     MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
                 );

@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import {
     importEpgSourceAtomically,
     type EpgSourceImportCallbacks,
+    type EpgTransactionRunner,
 } from './epg-source-spool';
 import type { ParsedChannel, ParsedProgram } from './epg-streaming-parser';
 
@@ -58,9 +59,13 @@ describe('importEpgSourceAtomically', () => {
             onChannelsBatch: jest.fn(),
             onProgramsBatch: jest.fn(),
         };
-        const runInTransaction = jest.fn(
-            <T>(operation: () => T): T => operation()
-        );
+        let transactionCalls = 0;
+        const runInTransaction: EpgTransactionRunner = <T>(
+            operation: () => T
+        ): T => {
+            transactionCalls++;
+            return operation();
+        };
 
         await expect(
             importEpgSourceAtomically(
@@ -70,15 +75,19 @@ describe('importEpgSourceAtomically', () => {
             )
         ).rejects.toThrow();
 
-        expect(runInTransaction).not.toHaveBeenCalled();
+        expect(transactionCalls).toBe(0);
         expect(callbacks.onChannelsBatch).not.toHaveBeenCalled();
         expect(callbacks.onProgramsBatch).not.toHaveBeenCalled();
     });
 
     it('does not replace stored guide data with an empty XMLTV document', async () => {
-        const runInTransaction = jest.fn(
-            <T>(operation: () => T): T => operation()
-        );
+        let transactionCalls = 0;
+        const runInTransaction: EpgTransactionRunner = <T>(
+            operation: () => T
+        ): T => {
+            transactionCalls++;
+            return operation();
+        };
 
         await expect(
             importEpgSourceAtomically(
@@ -90,7 +99,7 @@ describe('importEpgSourceAtomically', () => {
             'EPG parse produced 0 channels — feed may be unreachable or unsupported'
         );
 
-        expect(runInTransaction).not.toHaveBeenCalled();
+        expect(transactionCalls).toBe(0);
     });
 
     it('leaves existing state intact if a write fails during transactional replay', async () => {
