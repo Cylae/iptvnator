@@ -162,3 +162,5 @@ Do not declare completion until the final commit has been checked against the in
 - **Aggregate provider-body budget added:** Shared reservation budget caps streamed response chunks, temporary concat copies and UTF-16 decoding buffers at 512 MiB per process. Budget exhaustion now aborts the stream and normalizes to HTTP 503. Tests cover budget accounting, aggregate reservations, concat peaks and error normalization; repository execution remains blocked.
 
 - **Stale EPG spool cleanup added:** the next import performs a best-effort 24-hour sweep limited to private IPTVnator spool directories; symlink directories/files are ignored and cleanup errors do not block imports. Cross-platform cleanup tests are authored but unexecuted.
+
+- **Atomic replay liveness fix:** Transactional spool replay emits separate `EPG_COMMIT_PROGRESS` messages on parser batch boundaries. The fetch coordinator resets its timeout from these signals while preserving validation-phase display counters; the new callback path is regression-tested but not executed in CI.
