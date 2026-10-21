@@ -68,6 +68,7 @@ interface WorkerResponse {
         | 'EPG_COMPLETE'
         | 'EPG_ERROR'
         | 'EPG_PROGRESS'
+        | 'EPG_COMMIT_PROGRESS'
         | 'CLEAR_COMPLETE'
         | 'READY';
     error?: string;
@@ -114,6 +115,12 @@ async function fetchAndParseEpgStreaming(
                         const response: WorkerResponse = {
                             type: 'EPG_PROGRESS',
                             stats: { totalChannels, totalPrograms },
+                        };
+                        parentPort?.postMessage(response);
+                    },
+                    onCommitProgress: () => {
+                        const response: WorkerResponse = {
+                            type: 'EPG_COMMIT_PROGRESS',
                         };
                         parentPort?.postMessage(response);
                     },

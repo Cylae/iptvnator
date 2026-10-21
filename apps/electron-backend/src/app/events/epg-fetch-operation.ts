@@ -176,6 +176,13 @@ export function runEpgFetch(
                         }
                         break;
 
+                    case 'EPG_COMMIT_PROGRESS':
+                        // The validated spool is now being replayed inside
+                        // one SQLite transaction. Keep the no-progress timeout
+                        // alive without lowering the visible validation counts.
+                        scheduleFetchTimeout();
+                        break;
+
                     case 'EPG_COMPLETE':
                         epgLogger.log(
                             context.loggerLabel,

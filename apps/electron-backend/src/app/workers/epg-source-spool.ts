@@ -25,6 +25,8 @@ export interface EpgSourceImportCallbacks {
     readonly onChannelsBatch: (channels: ParsedChannel[]) => void;
     readonly onProgramsBatch: (programs: ParsedProgram[]) => void;
     readonly onProgress: (channels: number, programs: number) => void;
+    /** Called during transactional replay without changing user-visible counters. */
+    readonly onCommitProgress?: () => void;
 }
 
 export interface EpgSourceImportStats {
@@ -167,9 +169,10 @@ export async function importEpgSourceAtomically(
         return runInTransaction(() => {
             const stats = parseSpool(spoolPath, {
                 ...callbacks,
-                // Progress was reported during validation. Do not send lower
-                // counters again as the validated spool is replayed for writes.
-                onProgress: () => undefined,
+                // Do not send lower counters again during replay. A separate
+                // liveness signal resets the no-progress timeout without lying
+                // about the channel/programme counts shown in the UI.
+                onProgress: () => callbacks.onCommitProgress?.(),
             });
             if (stats.totalChannels === 0) {
                 throw new Error(EMPTY_EPG_SOURCE_MESSAGE);

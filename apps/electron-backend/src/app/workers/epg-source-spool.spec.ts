@@ -60,6 +60,23 @@ describe('importEpgSourceAtomically', () => {
         expect(parsedPrograms[0].title[0].value).toBe('Morning News');
     });
 
+    it('emits commit liveness signals without repeating validation progress counters', async () => {
+        const commitProgress = jest.fn();
+        const userProgress = jest.fn();
+        await importEpgSourceAtomically(
+            Readable.from([Buffer.from(validXml)]),
+            {
+                ...noOpCallbacks(),
+                onProgress: userProgress,
+                onCommitProgress: commitProgress,
+            },
+            (operation) => operation()
+        );
+
+        expect(userProgress).toHaveBeenCalled();
+        expect(commitProgress).toHaveBeenCalled();
+    });
+
     it('rejects a malformed feed late in preflight before opening a database transaction', async () => {
         const channels = Array.from(
             { length: 101 },
