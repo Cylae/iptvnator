@@ -1,4 +1,5 @@
 import { gzipSync } from 'node:zlib';
+import { MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS } from './provider-target-registry';
 import { createWebBackendApp } from './web-backend-app';
 import {
     registerProviderTarget,
@@ -300,6 +301,72 @@ https://stream.example/live.m3u8`);
                     clearKeys: { [kid]: key },
                 });
                 expect(body.playlist.items[2]['drm']).toBeUndefined();
+            }
+        );
+    });
+
+    it('bounds concurrent provider URL validations before DNS work can accumulate', async () => {
+        let releaseDns!: () => void;
+        const dnsMayFinish = new Promise<void>((resolve) => {
+            releaseDns = resolve;
+        });
+        let activeValidations = 0;
+        const resolvedHosts = new Set<string>();
+
+        await withServer(
+            createWebBackendApp({
+                resolveHostname: async (hostname) => {
+                    activeValidations++;
+                    resolvedHosts.add(hostname);
+                    try {
+                        await dnsMayFinish;
+                        return ['93.184.216.34'];
+                    } finally {
+                        activeValidations--;
+                    }
+                },
+            }),
+            async (baseUrl) => {
+                const requests = Array.from(
+                    {
+                        length:
+                            MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS + 1,
+                    },
+                    (_, index) =>
+                        fetch(`${baseUrl}/provider-targets`, {
+                            body: JSON.stringify({
+                                url: `https://provider-${index}.example/playlist.m3u`,
+                            }),
+                            headers: {
+                                'content-type': 'application/json',
+                            },
+                            method: 'POST',
+                        })
+                );
+
+                // Give the server time to schedule the whole burst while
+                // the resolver is held at the configured admission capacity.
+                await new Promise<void>((resolve) => setTimeout(resolve, 25));
+                const observedActive = activeValidations;
+                const observedHosts = resolvedHosts.size;
+                releaseDns();
+
+                const responses = await Promise.all(requests);
+                const statuses = responses.map((response) => response.status);
+                await Promise.all(responses.map((response) => response.json()));
+
+                expect(observedActive).toBe(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(observedHosts).toBe(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(statuses.filter((status) => status === 200)).toHaveLength(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(statuses.filter((status) => status === 503)).toHaveLength(
+                    1
+                );
             }
         );
     });

@@ -38,7 +38,10 @@ import {
     WebBackendHttpClient,
 } from './validated-http-client';
 import { ProviderRequestError } from './provider-request-error';
-import { ProviderTargetRegistry } from './provider-target-registry';
+import {
+    ProviderTargetRegistry,
+    ProviderTargetValidationGate,
+} from './provider-target-registry';
 import { gunzipProviderBody } from './provider-response';
 import {
     ProviderUrlPolicy,
@@ -105,6 +108,7 @@ export function createWebBackendApp(
         options.httpClient
     );
     const providerTargets = new ProviderTargetRegistry();
+    const providerTargetValidationGate = new ProviderTargetValidationGate();
 
     const corsMiddleware = cors({
         origin(origin, callback) {
@@ -152,14 +156,27 @@ export function createWebBackendApp(
                 return;
             }
 
-            const result = await validateProviderUrl(rawUrl, providerUrlPolicy);
-            if ('message' in result) {
-                res.status(result.status).json(providerUrlErrorBody(result));
+            const releaseValidation = providerTargetValidationGate.tryAcquire();
+            if (!releaseValidation) {
+                res.status(503).json({
+                    message: 'Provider target registration capacity reached',
+                    status: 503,
+                });
                 return;
             }
 
-            const targetId = providerTargets.register(result.url);
-            res.json({ targetId });
+            try {
+                const result = await validateProviderUrl(rawUrl, providerUrlPolicy);
+                if ('message' in result) {
+                    res.status(result.status).json(providerUrlErrorBody(result));
+                    return;
+                }
+
+                const targetId = providerTargets.register(result.url);
+                res.json({ targetId });
+            } finally {
+                releaseValidation();
+            }
         }
     );
 

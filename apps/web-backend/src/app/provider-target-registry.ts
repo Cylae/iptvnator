@@ -7,6 +7,9 @@ import { createHash } from 'node:crypto';
  */
 export const MAX_PROVIDER_TARGETS = 1024;
 
+/** Maximum simultaneous DNS/URL validations admitted by the PWA backend. */
+export const MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS = 16;
+
 /**
  * Bounded least-recently-used registry for URLs that have passed the provider
  * URL policy. Resolving a target refreshes its recency; registering a new URL
@@ -57,4 +60,45 @@ export class ProviderTargetRegistry {
 
 function createProviderTargetId(url: URL): string {
     return createHash('sha256').update(url.href).digest('hex');
+}
+
+
+/**
+ * Fail-fast admission gate for expensive provider URL/DNS validation.
+ *
+ * The target LRU bounds retained state; this gate separately bounds active
+ * validations so a burst of distinct URLs cannot create unlimited concurrent
+ * DNS work. Callers that cannot acquire a slot should return a retryable 503.
+ */
+export class ProviderTargetValidationGate {
+    private active = 0;
+
+    constructor(
+        private readonly maxConcurrent: number =
+            MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+    ) {
+        if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1) {
+            throw new RangeError(
+                'maxConcurrent must be a positive safe integer'
+            );
+        }
+    }
+
+    tryAcquire(): (() => void) | null {
+        if (this.active >= this.maxConcurrent) {
+            return null;
+        }
+
+        this.active++;
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            this.active--;
+        };
+    }
+
+    get activeCount(): number {
+        return this.active;
+    }
 }

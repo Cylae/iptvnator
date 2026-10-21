@@ -1,6 +1,8 @@
 import {
+    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS,
     MAX_PROVIDER_TARGETS,
     ProviderTargetRegistry,
+    ProviderTargetValidationGate,
 } from './provider-target-registry';
 
 describe('ProviderTargetRegistry', () => {
@@ -74,6 +76,51 @@ describe('ProviderTargetRegistry', () => {
         (capacity) => {
             expect(() => new ProviderTargetRegistry(capacity)).toThrow(
                 'maxEntries must be a positive safe integer'
+            );
+        }
+    );
+});
+
+
+describe('ProviderTargetValidationGate', () => {
+    it('admits no more than the configured concurrent validations', () => {
+        const gate = new ProviderTargetValidationGate(2);
+        const releaseFirst = gate.tryAcquire();
+        const releaseSecond = gate.tryAcquire();
+
+        expect(gate.activeCount).toBe(2);
+        expect(releaseFirst).toEqual(expect.any(Function));
+        expect(releaseSecond).toEqual(expect.any(Function));
+        expect(gate.tryAcquire()).toBeNull();
+
+        releaseFirst?.();
+        expect(gate.activeCount).toBe(1);
+        expect(gate.tryAcquire()).toEqual(expect.any(Function));
+    });
+
+    it('makes release idempotent so request cleanup cannot underflow the counter', () => {
+        const gate = new ProviderTargetValidationGate(1);
+        const release = gate.tryAcquire();
+
+        release?.();
+        release?.();
+
+        expect(gate.activeCount).toBe(0);
+        expect(gate.tryAcquire()).toEqual(expect.any(Function));
+    });
+
+    it('uses a finite conservative default capacity', () => {
+        const gate = new ProviderTargetValidationGate();
+
+        expect(MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS).toBe(16);
+        expect(gate.activeCount).toBe(0);
+    });
+
+    it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+        'rejects invalid concurrency capacity %s',
+        (capacity) => {
+            expect(() => new ProviderTargetValidationGate(capacity)).toThrow(
+                'maxConcurrent must be a positive safe integer'
             );
         }
     );
