@@ -6,29 +6,26 @@ import {
 import { parse } from 'iptv-playlist-parser';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { createPlaylistAgentFactory } from '../util/secure-https';
 import {
     createInvalidTlsCertificateError,
     getHostnameFromErrorUrl,
     isInvalidTlsCertificateError,
 } from '../util/security-errors';
 import { requestWithValidatedRedirects } from '../util/validated-axios';
+import { createPlaylistRequestConfig } from '../util/playlist-request-config';
 import type { M3uImportPerformanceCapture } from './playlist-import-performance';
 import { M3U_IMPORT_PERFORMANCE_PHASE } from '@iptvnator/shared/interfaces';
+
+export {
+    PLAYLIST_FETCH_TIMEOUT_MS,
+    PLAYLIST_MAX_RESPONSE_BYTES,
+} from '../util/playlist-request-config';
 
 export interface PlaylistFetchOptions {
     userAgent?: string;
     performanceCapture?: M3uImportPerformanceCapture | null;
     trustedInsecureTlsHosts?: readonly string[];
 }
-
-/**
- * Idle timeout for every playlist download hop. Without it a host that accepts
- * the connection and then goes silent keeps the request pending forever, which
- * stalled the unattended startup auto-update indefinitely (issue #931).
- * Mirrored by the playlist refresh worker.
- */
-export const PLAYLIST_FETCH_TIMEOUT_MS = 30000;
 
 function countPlaylistItems(value: unknown): number | undefined {
     try {
@@ -93,14 +90,7 @@ export async function fetchPlaylistFromUrl(
     const request = () =>
         requestWithValidatedRedirects<string>(
             url,
-            {
-                agentFactory: createPlaylistAgentFactory({
-                    trustedInsecureTlsHosts: options.trustedInsecureTlsHosts,
-                }),
-                method: 'GET',
-                ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
-                timeout: PLAYLIST_FETCH_TIMEOUT_MS,
-            },
+            createPlaylistRequestConfig(options),
             { allowPrivateNetworks: true }
         );
     let result;

@@ -1,3 +1,5 @@
+import { gzipSync } from 'node:zlib';
+import { MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS } from './provider-target-registry';
 import { createWebBackendApp } from './web-backend-app';
 import {
     registerProviderTarget,
@@ -90,6 +92,7 @@ https://stream.example/news.m3u8`);
                 expect(httpClient.requests).toEqual([
                     {
                         headers: undefined,
+                        maxResponseBytes: 64 * 1024 * 1024,
                         params: undefined,
                         timeout: 30000,
                         url: 'https://provider.example/list.m3u',
@@ -203,6 +206,7 @@ https://stream.example/news.m3u8`);
                 expect(httpClient.requests).toEqual([
                     {
                         headers: undefined,
+                        maxResponseBytes: 64 * 1024 * 1024,
                         params: undefined,
                         timeout: 30000,
                         url: 'https://provider.example/guide.xml',
@@ -211,6 +215,39 @@ https://stream.example/news.m3u8`);
             }
         );
     });
+
+    it.each(['guide.xml.gz', 'guide.xml.GZ'])(
+        'caps compressed XMLTV downloads before decompression for %s',
+        async (path) => {
+            const httpClient = new StubHttpClient();
+            httpClient.queueResponse(gzipSync('<tv></tv>'));
+
+            await withServer(
+                createWebBackendApp({
+                    httpClient,
+                    resolveHostname: resolvePublicHost,
+                }),
+                async (baseUrl) => {
+                    const sourceUrl = `https://provider.example/${path}`;
+                    const targetId = await registerProviderTarget(
+                        baseUrl,
+                        sourceUrl
+                    );
+                    const response = await fetch(
+                        `${baseUrl}/parse-xml?targetId=${targetId}`
+                    );
+
+                    expect(response.status).toBe(200);
+                    await response.json();
+                    expect(httpClient.requests[0]).toMatchObject({
+                        maxResponseBytes: 32 * 1024 * 1024,
+                        responseType: 'arraybuffer',
+                        url: sourceUrl,
+                    });
+                }
+            );
+        }
+    );
 
     it('extracts KODIPROP ClearKey DRM on the /parse URL-import path', async () => {
         const httpClient = new StubHttpClient();
@@ -264,6 +301,96 @@ https://stream.example/live.m3u8`);
                     clearKeys: { [kid]: key },
                 });
                 expect(body.playlist.items[2]['drm']).toBeUndefined();
+            }
+        );
+    });
+
+    it('bounds concurrent provider URL validations before DNS work can accumulate', async () => {
+        let releaseDns!: () => void;
+        const dnsMayFinish = new Promise<void>((resolve) => {
+            releaseDns = resolve;
+        });
+        let activeValidations = 0;
+        const resolvedHosts = new Set<string>();
+
+        await withServer(
+            createWebBackendApp({
+                resolveHostname: async (hostname) => {
+                    activeValidations++;
+                    resolvedHosts.add(hostname);
+                    try {
+                        await dnsMayFinish;
+                        return ['93.184.216.34'];
+                    } finally {
+                        activeValidations--;
+                    }
+                },
+            }),
+            async (baseUrl) => {
+                const requests = Array.from(
+                    {
+                        length:
+                            MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS + 1,
+                    },
+                    (_, index) =>
+                        fetch(`${baseUrl}/provider-targets`, {
+                            body: JSON.stringify({
+                                url: `https://provider-${index}.example/playlist.m3u`,
+                            }),
+                            headers: {
+                                'content-type': 'application/json',
+                            },
+                            method: 'POST',
+                        })
+                );
+
+                // Do not rely on a fixed sleep to decide whether the
+                // overflow request reached the server. Only a 503 can settle
+                // this race before the held DNS operations are released.
+                const neverResponds = new Promise<Response>(
+                    () => undefined
+                );
+                const overloadRequest = Promise.race(
+                    requests.map((request) =>
+                        request.then(
+                            (response) =>
+                                response.status === 503
+                                    ? response
+                                    : neverResponds,
+                            () => neverResponds
+                        )
+                    )
+                );
+                let overloadTimer: ReturnType<typeof setTimeout> | undefined;
+                const overloadResponse = await Promise.race([
+                    overloadRequest,
+                    new Promise<null>((resolve) => {
+                        overloadTimer = setTimeout(() => resolve(null), 2_000);
+                    }),
+                ]);
+                if (overloadTimer) clearTimeout(overloadTimer);
+
+                const observedActive = activeValidations;
+                const observedHosts = resolvedHosts.size;
+                releaseDns();
+
+                const responses = await Promise.all(requests);
+                const statuses = responses.map((response) => response.status);
+                await Promise.all(responses.map((response) => response.json()));
+
+                expect(overloadResponse?.status).toBe(503);
+                expect(observedActive).toBe(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(observedHosts).toBe(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(statuses.filter((status) => status === 200)).toHaveLength(
+                    MAX_CONCURRENT_PROVIDER_TARGET_VALIDATIONS
+                );
+                expect(statuses.filter((status) => status === 503)).toHaveLength(
+                    1
+                );
             }
         );
     });
@@ -791,6 +918,39 @@ https://stream.example/live.m3u8`);
         } finally {
             errorSpy.mockRestore();
         }
+    });
+
+    it('returns 502 when a provider responds but its body cannot be consumed', async () => {
+        const httpClient = new StubHttpClient();
+        httpClient.queueNetworkError(
+            Object.assign(new Error('Provider response body failed'), {
+                code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                response: { status: 200, statusText: 'OK' },
+            })
+        );
+
+        await withServer(
+            createWebBackendApp({
+                httpClient,
+                resolveHostname: resolvePublicHost,
+            }),
+            async (baseUrl) => {
+                const targetId = await registerProviderTarget(
+                    baseUrl,
+                    'https://provider.example/list.m3u'
+                );
+                const response = await fetch(
+                    `${baseUrl}/parse?targetId=${targetId}`
+                );
+
+                expect(response.status).toBe(502);
+                await expect(response.json()).resolves.toEqual({
+                    message: 'Provider response exceeded the configured size limit',
+                    status: 502,
+                    code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                });
+            }
+        );
     });
 
     it('returns provider parse errors as JSON instead of executable text', async () => {

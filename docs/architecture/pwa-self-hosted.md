@@ -73,6 +73,22 @@ The current self-hosted PWA uses these `apps/web-backend` routes:
 - `GET /xtream?targetId=<id>&username=<u>&password=<p>&action=<action>`
 - `GET /stalker?targetId=<id>&macAddress=<mac>&action=<action>`
 
+The backend retains at most 1,024 registered provider URLs per process. The
+registry uses least-recently-used eviction: new registrations replace the
+oldest inactive target once the limit is reached, and successful lookups refresh
+a target's recency. The backend also admits at most 16 concurrent provider
+URL/DNS validations. When all slots are occupied, additional
+`POST /provider-targets` requests receive HTTP 503 with a fixed message instead
+of creating more simultaneous resolver work; clients can retry after active
+validations finish. This is a per-process limit, not a deployment-wide quota.
+The PWA keeps a separate, bounded cache of at most 256 recent registrations,
+keyed by both provider URL and backend URL. These bounds prevent unbounded
+retention of credential-bearing URL objects and registration promises in
+long-lived or exposed self-hosted instances. A missing-target response means
+the registration was evicted or the backend restarted; the PWA re-registers
+that URL and retries the request once. Upstream provider 404 responses are not
+retried by this recovery path.
+
 The PWA continues to use `PwaService`; only the backend base URL is resolved at
 runtime. Electron routes remain owned by the Electron backend and preload
 bridge.
@@ -198,6 +214,24 @@ failure attribution.
 
 Do not disable TLS certificate validation in the backend proxy. For private
 certificate authorities, configure Node with `NODE_EXTRA_CA_CERTS`.
+
+### Aggregate response-body memory budget
+
+The web backend has a 128 MiB per-response cap and a shared 512 MiB reservation
+budget for chunks from streamed final responses, their temporary concatenated
+buffer, and a conservative UTF-16 decoding allowance. If a reservation would
+exceed the shared budget, the backend aborts that response body and normalizes
+the failure as a retryable 503 instead of allocating beyond its budget.
+Reservations are released in cleanup paths on success and failure.
+
+This byte budget covers response buffering and text decoding, not the complete
+Node process RSS. Parsed JSON object graphs are created while their source text
+still exists and can add significant memory; results retained by route consumers
+after the helper returns are also outside the budget. This is a bound on
+concurrent body-buffering/decoding, not a claim that total process memory has a
+hard 512 MiB ceiling. Regression tests exercise concurrent reservation pressure
+and the controlled overload error, but must run in the repository toolchain
+before this behavior is considered validated.
 
 ## PWA Portal User Data
 

@@ -27,6 +27,7 @@ export const STALKER_IDENTITY_HEADERS = {
 export interface HttpRequest {
     readonly headers?: Record<string, string>;
     readonly params?: Record<string, string>;
+    readonly maxResponseBytes?: number;
     readonly responseData: unknown;
     readonly responseStatus?: number;
     readonly timeout?: number;
@@ -80,6 +81,9 @@ export class StubHttpClient implements WebBackendHttpClient {
         this.requests.push({
             headers: options.headers,
             params: options.params,
+            ...(options.maxResponseBytes === undefined
+                ? {}
+                : { maxResponseBytes: options.maxResponseBytes }),
             timeout: options.timeout,
             url,
         });

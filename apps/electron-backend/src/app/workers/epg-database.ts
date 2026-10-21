@@ -102,6 +102,14 @@ export class EpgDatabase {
     }
 
     /**
+     * Runs all batch writes for one already-validated source inside a single
+     * outer transaction. Per-batch transactions become nested savepoints.
+     */
+    runInTransaction<T>(operation: () => T): T {
+        return this.db.transaction(operation)();
+    }
+
+    /**
      * Insert a batch of channels. When `clearTodayAndFuture` is true, the
      * selective delete (today+future and older-than-7-days) runs inside the
      * same transaction so a parse failure after the delete atomically rolls
@@ -180,8 +188,17 @@ export class EpgDatabase {
                         sourceUrl
                     );
                     insertedCount++;
-                } catch {
-                    // Skip individual failures such as FK constraint errors.
+                } catch (error) {
+                    const code = (error as { code?: unknown } | null)?.code;
+                    if (
+                        typeof code === 'string' &&
+                        code.startsWith('SQLITE_CONSTRAINT')
+                    ) {
+                        // Invalid individual rows must not discard the rest of
+                        // a feed, but storage failures must abort the transaction.
+                        continue;
+                    }
+                    throw error;
                 }
             }
         });

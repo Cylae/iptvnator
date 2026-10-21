@@ -224,6 +224,32 @@ describe('createDecodedEpgStream', () => {
         expect(parseChannelCount(decodedText)).toBe(1);
     });
 
+    it('accepts a decoded body exactly at its configured byte limit', async () => {
+        const expected = Buffer.from('12345678');
+        const output = createDecodedEpgStream(
+            Readable.from([expected]),
+            {},
+            false,
+            expected.byteLength
+        );
+
+        await expect(collectDecodedBytes(output)).resolves.toEqual(expected);
+    });
+
+    it('stops gzip expansion when decoded XMLTV exceeds its byte limit', async () => {
+        const source = Readable.from([
+            gzipSync(Buffer.alloc(1_024, 0x61)),
+        ]);
+        const output = createDecodedEpgStream(source, {}, true, 512);
+
+        await expect(collectDecodedBytes(output)).rejects.toMatchObject({
+            code: 'ERR_EPG_RESPONSE_TOO_LARGE',
+            maxBytes: 512,
+        });
+        expect(source.destroyed).toBe(true);
+        expect(output.destroyed).toBe(true);
+    });
+
     it('destroys the source stream when a decoder fails', async () => {
         const source = new PassThrough();
         const decodedStream = createDecodedEpgStream(

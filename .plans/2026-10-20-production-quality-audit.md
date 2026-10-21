@@ -3,7 +3,7 @@
 **Date:** 2026-10-20  
 **Base branch:** `master`  
 **Base commit:** `3634e8a59dee88cbbce83cbe99ffce0d18b1f4d0`  
-**Status:** In progress — Nx lockfile validation and Electron IP classification hardening are merged into `master`; a follow-up URL canonicalization fix is under review in PR #2. GitHub currently reports no Actions runs or check-runs, and the local environment cannot resolve `github.com` for a repository clone.
+**Status:** Consolidated draft PR #7 contains the response-size protections originally in PR #4, decoded XMLTV limits from PR #6, and bounded PWA provider-target state from PR #7. PR #4 and PR #6 are closed as superseded; their heads remain reachable from the integration commit. Database initialization recovery from PR #5 is merged into `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e`. Full repository validation remains unavailable: local checkout cannot resolve `github.com`, and GitHub currently reports no Actions runs or commit checks. No final-head test/build success is claimed.
 
 ## Initial inventory
 
@@ -69,14 +69,16 @@ Do not declare completion until the final commit has been checked against the in
 - **Evidence:** The current `pnpm-lock.yaml` contains both plain and peer-qualified entries for the same Nx packages.
 - **Change:** Extract the semantic version prefix from lockfile keys while still rejecting real version mismatches; add regression tests for matching peer-qualified entries and a mismatched peer-qualified official package.
 - **Files changed:** `tools/dependencies/check-nx-version-sync.mjs` and `tools/dependencies/check-nx-version-sync.test.mjs`.
-- **Validation status:** Regression tests are authored but not yet executed. The environment cannot resolve `github.com` for a local clone, and the draft PR currently has no visible Actions runs or commit status checks. Do not treat the fix as verified until executable checks return results.
-- **Review vehicle:** PR #1 (`https://github.com/Cylae/iptvnator/pull/1`) was merged into `master` at `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`. The original test suites and full CI were not executed before merge; keep that validation gap visible.
+- **Validation status at the time:** Regression tests were authored but the repository suite had not executed. The local clone could not resolve `github.com`; GitHub reported no Actions runs or commit checks. The isolated Node harness results above are not substitutes for the committed suite.
+- **Review vehicle:** PR #1 was merged to `master` as `0d6152abb2df73742a58ab5b573075bfe5a8cbe8`.
 
-### Next steps
+### Current continuation plan
 
-1. Restore a trustworthy execution path for repository checks. The GitHub API currently reports zero workflow runs and zero check-runs for both the merged commit and PR #2; a local clone is blocked by DNS/network resolution.
-2. Run the committed Nx validator, Electron URL safety, web provider URL policy, typechecks, lint, coverage, and packaging checks before treating the changes as verified.
-3. Continue the audit across migrations, networking, provider compatibility, playback, UI, performance, and packaging, logging each evidenced defect and its regression coverage.
+1. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
+2. Validate the new atomic EPG spool/replay implementation against real SQLite integration tests and supported Windows/macOS/Linux runtimes. Confirm temporary-disk capacity and stale-spool cleanup behavior under Windows/macOS/Linux and concurrent worker scenarios before release.
+3. Validate the new shared 512 MiB provider body-buffer budget on the repository toolchain; the remaining memory risk is parsed JSON object graphs and values retained after helper return, which this byte budget does not cover.
+4. Validate using the repository's declared Node/pnpm versions. The available runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against the final head.
+5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
 
 
 - **Additional verification:** The corrected version-extraction logic was exercised against all 3,479 package keys parsed from the repository's actual `pnpm-lock.yaml`, including 42 `nx`/`@nx/*` entries and 11 peer-qualified entries; the scan found zero mismatches. Isolated Node.js probes also covered plain keys, peer-qualified keys, prerelease versions, and a genuine mismatch. This is targeted logic validation, **not** a substitute for running the committed Node test suite or the full project checks.
@@ -105,10 +107,60 @@ Do not declare completion until the final commit has been checked against the in
 - **Implementation refinement:** Replaced the handwritten IPv6 word parser with `BlockList` handling for IPv4-mapped IPv6 as well, reducing bespoke address-parsing code and matching the web backend's approach more closely. Added a public IPv4-mapped IPv6 regression case to ensure the hardening does not block mapped public addresses.
 
 
-### Follow-up security pass — absolute localhost names
+### Follow-up security review — URL and redirect handling
 
-- **Defect:** The Electron hostname guard compared the raw hostname to `localhost` and checked the `.localhost` suffix without removing the DNS root dot. Absolute names such as `localhost.` and `metadata.localhost.` bypassed the pre-resolution name check. Although strict DNS-answer validation still rejects private answers, the early guard should reject local namespaces independently of resolver behavior.
-- **Change:** Normalize DNS root dots in both the Electron and web-backend local-host checks. Repeated trailing dots are also normalized to a local name, so malformed aliases such as `localhost..` fail closed rather than reaching DNS resolution.
-- **Regression tests:** Added Electron cases for `localhost.`, `metadata.localhost.`, `localhost..`, and `metadata.localhost..`, asserting the resolver is never called. Added the repeated-dot cases to the web-backend URL-policy suite.
-- **Validation:** An isolated Node.js harness passed eight hostname-canonicalization assertions, including allowed non-local controls. This validates the normalization behavior only; the committed Jest tests, typechecks, lint, full coverage and CI remain unexecuted.
-- **Review vehicle:** PR #2 — https://github.com/Cylae/iptvnator/pull/2.
+- **PR:** [#2 — harden URL validation and redirect credentials](https://github.com/Cylae/iptvnator/pull/2).
+- **Changes:** Strip the DNS root dot before applying the localhost namespace denylist, remove Stalker `SN` and explicit `Host` headers on unsafe redirects, and convert malformed redirect destinations into a controlled policy error.
+- **Regression coverage:** Absolute localhost aliases, cross-host sensitive-header removal, and malformed redirect locations; the branch also tightens fail-closed handling for malformed IPv6 classification inputs.
+- **Validation:** The prior local review recorded 141 focused Jest tests passing on the pinned PR head `cbe072c`. ESLint did not complete because the partial dependency installation failed during Windows module linking and Nx project discovery stalled. Full CI, typecheck, coverage, and E2E remain unverified; GitHub reports no Actions runs or check-runs for the merged head `43c317b`.
+
+### Integrated remote-response resource limits — original PR #4, consolidated in PR #7
+
+- **Branch/head:** `security/bound-remote-response-memory-2026-10-20` / `75706f54100a52e10358dd3585c93e07aff81dc2`.
+- **Changes:** Limit remote M3U responses to 64 MiB; cap generic web-backend provider bodies at 128 MiB; cap plain XMLTV at 64 MiB, compressed XMLTV at 32 MiB, and gzip-expanded XMLTV at 64 MiB; apply the same M3U policy to Electron import and refresh.
+- **Regression coverage:** Exact byte limits, oversized streaming bodies, UTF-8 counting/BOM behavior, gzip expansion, redirect-hop configuration, and failed-2xx body handling.
+- **Validation:** The PR reports standalone probes only. The committed Jest suites, typecheck, lint, coverage, integration/E2E, and CI have not been executed for this head.
+- **Compatibility gate:** Verify representative large Xtream/Stalker catalog responses before merge; the 128 MiB generic cap may reject unusually large responses.
+- **Aggregate-memory remediation added:** `provider-response.ts` reserves a shared 512 MiB budget across streamed body chunks, concat output buffers, and a conservative UTF-16 decoding allowance. It aborts a body before allocating when reservations exceed capacity and normalizes the condition to a retryable 503. Tests are authored but unexecuted. The budget does not include parsed JSON object graphs or results retained after the helper returns; validate actual RSS under representative concurrency before claiming process-wide memory exhaustion is solved.
+
+### Integrated decoded XMLTV resource limits — original PR #6, consolidated in PR #7
+
+- **Branch/head:** `security/bound-epg-stream-memory-2026-10-20` / `ee27aef28bb4a99f6be674cd234b50d2fd5bf44f`.
+- **Changes:** Cap each decoded EPG source at 256 MiB after content-encoding and optional file-gzip layers, including authorized local files; cap each XMLTV text accumulator at 1 MiB of UTF-8 bytes.
+- **Regression coverage:** Exact decoded-size boundaries, gzip expansion rejection, stream teardown, and UTF-8 byte-aware text limits.
+- **Validation:** The PR reports an isolated Node harness only. Committed Jest tests, typecheck, lint, Electron integration tests, and CI remain unverified.
+- **Data-integrity remediation added:** `epg-source-spool.ts` validates the full decoded stream while writing a private bounded spool, then replays it under one outer SQLite transaction only after successful preflight. Empty or malformed input never starts a database transaction; non-constraint storage failures propagate so outer rollback can preserve the previous state. Regression tests cover malformed late XML, empty feeds, UTF-8 split across chunks, and rollback semantics. These tests are authored but not executed on the repository runtime.
+
+### Follow-up database reliability review
+
+- **PR:** [#5 — recover after initialization failures](https://github.com/Cylae/iptvnator/pull/5).
+- **Defect:** A rejected module-scoped database initialization promise could remain cached after SQLite open or initialization failure, preventing later calls from recovering without restarting the application.
+- **Changes:** Close and clear a partially initialized SQLite handle and reset the cached promise only when the failing attempt still owns the initialization state. This ownership check prevents an older rejection handler from clearing a newer retry.
+- **Regression coverage:** The Electron/SQLite harness exercises an open failure caused by a directory at the database file path, failure to initialize from a corrupt file, and a successful retry with `integrity_check` and schema verification.
+- **Validation:** The committed integration test has not run in this environment.
+
+### Integrated PWA provider-target bounds — original PR #7
+
+- **Current branch:** `fix/pwa-provider-target-memory-bound-2026-10-20`.
+- **Defect:** The self-hosted backend retained every distinct validated provider URL in an unbounded `Map<string, URL>`; the browser also cached registrations without a capacity bound. Long-lived or exposed instances could accumulate credential-bearing URLs and registration promises indefinitely.
+- **Changes:** Add an LRU backend registry capped at 1,024 URLs and a browser registration cache capped at 256 entries. The browser cache key includes both backend URL and provider URL. A missing-target response triggers one registration refresh and one retry, but unrelated/upstream 404s are not retried. The request flow uses the identity of the registration promise rather than the deterministic target ID to avoid invalidating a concurrent refresh.
+- **Regression coverage:** Bounded LRU behavior, active-target recency, duplicate registration, URL object isolation, invalid capacity values, shared in-flight registration, browser cache eviction, per-backend cache separation, and recovery for playlist, Xtream, and Stalker requests.
+- **Documentation and release note:** `docs/architecture/pwa-self-hosted.md` and `.changes/security-provider-target-registry.md`.
+- **Validation:** These tests are authored but not executed. The working environment cannot clone the repository and the Actions API continues to return zero workflow runs/checks. Do not merge until the owning web-backend and web unit suites, typechecks, lint, and relevant E2E checks have run.
+- **Admission control added:** The LRU bounds retained URL entries, `ProviderTargetValidationGate` caps active `POST /provider-targets` URL/DNS validations at 16, and the shared provider-body budget caps concurrent stream-buffer/decoding reservations at 512 MiB. Both overflow paths fail fast with HTTP 503. Unit and integration regressions are authored but have not run on the repository toolchain. Remaining memory risk is concentrated in parsed JSON object graphs and values retained after the response helper returns.
+
+
+### Consolidation record — 2026-10-21
+
+- **Integration base:** `master` at `5d4dbceee84368bf351774abbdbe60c5ae3b217e` (includes the merged SQLite initialization recovery PR #5).
+- **Included sources:** remote response caps / buffered provider handling from PR #4 (`75706f5`), decoded XMLTV and per-field caps from PR #6 (`ee27aef`), and LRU provider targets / browser-cache recovery from PR #7 (`e1dd5da`). The original heads remain reachable as integration commit parents to preserve provenance; PRs #4 and #6 have been closed as superseded.
+- **Manual merge points:** Combined PR #4's response-size handling with PR #7's bounded provider target registry in `apps/web-backend/src/app/web-backend-app.ts`; added PR #4's redirect size-limit regression to the current `master` `validated-axios.spec.ts` without discarding the URL/credential redirect tests already merged from PR #2.
+- **Unresolved validation:** GitHub Actions/check-run APIs have returned no runs/statuses for the repository, and a clean local checkout is unavailable due DNS resolution failure. This is not a passing validation result. Concurrent raw response buffering/decoding is now capped by a shared 512 MiB reservation budget; parsed JSON object graphs and returned values retained after the helper finishes remain outside this budget. Provider-target admission is capped at 16 simultaneous validations per process.
+
+- **Atomic EPG import update:** Added a private 256 MiB-bounded decoded-source spool, SAX preflight and UTF-8-safe replay in a single outer SQLite transaction. Added rollback/error-classification regression tests. Repository tests remain unexecuted.
+
+- **Aggregate provider-body budget added:** Shared reservation budget caps streamed response chunks, temporary concat copies and UTF-16 decoding buffers at 512 MiB per process. Budget exhaustion now aborts the stream and normalizes to HTTP 503. Tests cover budget accounting, aggregate reservations, concat peaks and error normalization; repository execution remains blocked.
+
+- **Stale EPG spool cleanup added:** the next import performs a best-effort 24-hour sweep limited to private IPTVnator spool directories; symlink directories/files are ignored and cleanup errors do not block imports. Cross-platform cleanup tests are authored but unexecuted.
+
+- **Atomic replay liveness fix:** Transactional spool replay emits separate `EPG_COMMIT_PROGRESS` messages on parser batch boundaries. The fetch coordinator resets its timeout from these signals while preserving validation-phase display counters; the new callback path is regression-tested but not executed in CI.

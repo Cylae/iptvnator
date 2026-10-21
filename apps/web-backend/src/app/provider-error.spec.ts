@@ -101,6 +101,42 @@ describe('normalizeProviderError', () => {
             status: 502,
         });
     });
+
+    it('returns a retryable 503 when the shared response-buffer budget is exhausted', () => {
+        const failure = Object.assign(
+            new Error('Provider response body failed', {
+                cause: errorWithCode(
+                    'Concurrent provider response buffering capacity is exhausted',
+                    'ERR_PROVIDER_RESPONSE_MEMORY_LIMIT'
+                ),
+            }),
+            { response: { status: 200, statusText: 'OK' } }
+        );
+
+        expect(normalizeProviderError(failure)).toEqual({
+            message: 'Concurrent provider response buffering capacity is exhausted',
+            status: 503,
+            code: 'ERR_PROVIDER_RESPONSE_MEMORY_LIMIT',
+        });
+    });
+
+    it('does not expose a failed 2xx response body as a successful gateway response', () => {
+        const failure = Object.assign(
+            new Error('Provider response body failed', {
+                cause: errorWithCode(
+                    'Provider response exceeded its limit',
+                    'ERR_PROVIDER_RESPONSE_TOO_LARGE'
+                ),
+            }),
+            { response: { status: 200, statusText: 'OK' } }
+        );
+
+        expect(normalizeProviderError(failure)).toEqual({
+            message: 'Provider response exceeded the configured size limit',
+            status: 502,
+            code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+        });
+    });
 });
 
 describe('logProviderRequestFailure', () => {

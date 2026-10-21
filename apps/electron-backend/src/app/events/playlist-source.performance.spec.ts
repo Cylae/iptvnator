@@ -9,6 +9,11 @@ import {
     type M3uImportPerformanceCaptureRuntime,
 } from './playlist-import-performance';
 import { fetchPlaylistFromUrl } from './playlist-source';
+import {
+    createPlaylistRequestConfig,
+    PLAYLIST_FETCH_TIMEOUT_MS,
+    PLAYLIST_MAX_RESPONSE_BYTES,
+} from '../util/playlist-request-config';
 
 const mockCreatePlaylistObject = jest.fn();
 const mockGetFilenameFromUrl = jest.fn();
@@ -19,6 +24,7 @@ jest.mock('@iptvnator/shared/m3u-utils', () => ({
     createPlaylistObject: (...args: unknown[]) =>
         mockCreatePlaylistObject(...args),
     getFilenameFromUrl: (...args: unknown[]) => mockGetFilenameFromUrl(...args),
+    MAX_REMOTE_M3U_BYTES: 64 * 1024 * 1024,
 }));
 
 jest.mock('iptv-playlist-parser', () => ({
@@ -59,6 +65,24 @@ describe('URL playlist import performance phases', () => {
         mockGetFilenameFromUrl.mockReset();
         mockParse.mockReset();
         mockRequestWithValidatedRedirects.mockReset();
+    });
+
+    it('caps remote playlist responses before the parser buffers channel objects', () => {
+        const controller = new AbortController();
+        const config = createPlaylistRequestConfig({
+            userAgent: '  IPTVnator-Test/1.0  ',
+            trustedInsecureTlsHosts: ['provider.example'],
+            signal: controller.signal,
+        });
+
+        expect(PLAYLIST_MAX_RESPONSE_BYTES).toBe(64 * 1024 * 1024);
+        expect(config).toMatchObject({
+            method: 'GET',
+            maxContentLength: PLAYLIST_MAX_RESPONSE_BYTES,
+            timeout: PLAYLIST_FETCH_TIMEOUT_MS,
+            headers: { 'User-Agent': 'IPTVnator-Test/1.0' },
+            signal: controller.signal,
+        });
     });
 
     it('does not allocate phase state or read clocks while capture is disabled', async () => {

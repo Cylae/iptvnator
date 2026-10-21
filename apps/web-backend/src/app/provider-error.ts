@@ -91,15 +91,38 @@ export function normalizeProviderError(
         response &&
         (response.status !== undefined || response.statusText !== undefined)
     ) {
-        return {
-            message: response.statusText ?? 'Bad Gateway',
-            status: response.status ?? 502,
-        };
+        // A 2xx response with an unreadable, truncated, or oversized body is
+        // not a successful proxy result. Preserve genuine upstream failures
+        // (4xx/5xx), but normalize body-processing failures to a gateway error.
+        if (
+            response.status === undefined ||
+            response.status < 200 ||
+            response.status >= 400
+        ) {
+            return {
+                message: response.statusText ?? 'Bad Gateway',
+                status: response.status ?? 502,
+            };
+        }
     }
 
-    const code = collectProviderErrorCodes(error)[0];
+    const codes = collectProviderErrorCodes(error);
+    if (codes.includes('ERR_PROVIDER_RESPONSE_MEMORY_LIMIT')) {
+        return {
+            message: 'Concurrent provider response buffering capacity is exhausted',
+            status: 503,
+            code: 'ERR_PROVIDER_RESPONSE_MEMORY_LIMIT',
+        };
+    }
+    const code = codes[0];
+    const message =
+        code === 'ERR_PROVIDER_RESPONSE_TOO_LARGE'
+            ? 'Provider response exceeded the configured size limit'
+            : code
+              ? `Bad Gateway (${code})`
+              : 'Bad Gateway';
     return {
-        message: code ? `Bad Gateway (${code})` : 'Bad Gateway',
+        message,
         status: 502,
         ...(code ? { code } : {}),
     };

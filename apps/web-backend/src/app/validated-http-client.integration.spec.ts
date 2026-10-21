@@ -175,6 +175,31 @@ describe('real axios validated transport', () => {
             expect((await client.get(`${url}/text`)).data).toEqual('hello');
         });
     });
+    it('stops reading a streamed provider body after the configured byte limit', async () => {
+        const body = Buffer.alloc(256 * 1024, 'x');
+        const provider = express().use((_req, res) => res.end(body));
+
+        await withServer(provider, async (url) => {
+            const error = await new ValidatedHttpClient(lan)
+                .get(url, { maxResponseBytes: 1_024 })
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(ProviderRequestError);
+            const failure = error as ProviderRequestError;
+            expect(failure.initialResponded).toBe(true);
+            expect(failure.cause).toMatchObject({
+                response: { status: 200, statusText: 'OK' },
+                cause: {
+                    code: 'ERR_PROVIDER_RESPONSE_TOO_LARGE',
+                    maxBytes: 1_024,
+                },
+            });
+            expect(classifyHostRequestFailure(failure.cause)).toBe(
+                'responded'
+            );
+        });
+    });
+
     it('cancels an unfinished final body and closes its connection', async () => {
         const controller = new AbortController();
         let started!: () => void;
@@ -211,6 +236,7 @@ describe('real axios validated transport', () => {
                     .catch((error: unknown) => error);
                 expect(error).toBeInstanceOf(ProviderRequestError);
                 const failure = error as ProviderRequestError;
+                expect(failure.initialResponded).toBe(true);
                 expect(failure.cause).toMatchObject({
                     response: { status: 200, statusText: 'OK' },
                 });

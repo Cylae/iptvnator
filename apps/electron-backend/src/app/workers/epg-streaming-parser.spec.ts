@@ -1,4 +1,5 @@
 import {
+    MAX_XMLTV_TEXT_FIELD_BYTES,
     parseXmltvDate,
     StreamingEpgParser,
     type ParsedChannel,
@@ -45,6 +46,22 @@ describe('parseXmltvDate', () => {
 });
 
 describe('StreamingEpgParser', () => {
+    it('rejects a text field that exceeds its UTF-8 byte limit', () => {
+        const parser = new StreamingEpgParser(
+            () => undefined,
+            () => undefined,
+            () => undefined
+        );
+        const oversizedText = 'é'.repeat(
+            Math.floor(MAX_XMLTV_TEXT_FIELD_BYTES / 2) + 1
+        );
+        const xml = `<tv><channel id="news"><display-name>${oversizedText}</display-name></channel></tv>`;
+
+        expect(() => parser.write(xml)).toThrow(
+            `XMLTV text field exceeded the ${MAX_XMLTV_TEXT_FIELD_BYTES}-byte limit`
+        );
+    });
+
     it('flushes pending channels before the first programme batch', () => {
         const callbackOrder: string[] = [];
         const channelIdsByBatch: string[][] = [];

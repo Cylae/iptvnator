@@ -7,7 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { SwUpdate } from '@angular/service-worker';
 import { Store } from '@ngrx/store';
 import { TranslateService } from '@ngx-translate/core';
-import { config as rxjsConfig, EMPTY } from 'rxjs';
+import { config as rxjsConfig, EMPTY, firstValueFrom } from 'rxjs';
 import {
     buildHostConnectivityFastFailMessage,
     CONNECTIVITY_GUARD_RESET,
@@ -151,6 +151,154 @@ describe('PwaService', () => {
             expect(parse.request.params.keys()).toEqual(['targetId']);
             expect(parse.request.headers.has('User-Agent')).toBe(false);
             parse.flush({});
+        }
+    );
+
+    it(
+        're-registers a missing provider target before retrying playlist parsing',
+        async () => {
+            const pending = firstValueFrom(
+                service.getPlaylistFromUrl(
+                    'https://provider.example/list.m3u'
+                )
+            );
+
+            http.expectOne((req) => req.url.endsWith('/provider-targets')).flush({
+                targetId: 'stale-target',
+            });
+            await new Promise((resolve) => setTimeout(resolve));
+
+            const staleRequest = http.expectOne((req) =>
+                req.url.endsWith('/parse')
+            );
+            expect(staleRequest.request.params.get('targetId')).toBe(
+                'stale-target'
+            );
+            staleRequest.flush(
+                { message: 'Provider target not found', status: 404 },
+                { status: 404, statusText: 'Not Found' }
+            );
+            await new Promise((resolve) => setTimeout(resolve));
+
+            http.expectOne((req) =>
+                req.url.endsWith('/provider-targets')
+            ).flush({ targetId: 'refreshed-target' });
+            await new Promise((resolve) => setTimeout(resolve));
+
+            const retry = http.expectOne((req) => req.url.endsWith('/parse'));
+            expect(retry.request.params.get('targetId')).toBe(
+                'refreshed-target'
+            );
+            retry.flush({ _id: 'playlist-1' });
+
+            await expect(pending).resolves.toEqual({ _id: 'playlist-1' });
+        }
+    );
+
+    it(
+        're-registers a missing provider target before retrying Xtream requests',
+        async () => {
+            const pending = service.sendIpcEvent(XTREAM_REQUEST, {
+                url: 'https://provider.example',
+                params: { action: 'get_account_info' },
+            }) as Promise<unknown>;
+
+            http.expectOne((req) =>
+                req.url.endsWith('/provider-targets')
+            ).flush({ targetId: 'stale-target' });
+            await new Promise((resolve) => setTimeout(resolve));
+
+            const staleRequest = http.expectOne((req) =>
+                req.url.endsWith('/xtream')
+            );
+            expect(staleRequest.request.params.get('targetId')).toBe(
+                'stale-target'
+            );
+            staleRequest.flush(
+                { message: 'Provider target not found', status: 404 },
+                { status: 404, statusText: 'Not Found' }
+            );
+            await new Promise((resolve) => setTimeout(resolve));
+
+            http.expectOne((req) =>
+                req.url.endsWith('/provider-targets')
+            ).flush({ targetId: 'refreshed-target' });
+            await new Promise((resolve) => setTimeout(resolve));
+
+            const retry = http.expectOne((req) => req.url.endsWith('/xtream'));
+            expect(retry.request.params.get('targetId')).toBe(
+                'refreshed-target'
+            );
+            retry.flush({
+                action: 'get_account_info',
+                payload: { user_info: { username: 'demo' } },
+            });
+
+            await expect(pending).resolves.toMatchObject({
+                payload: { user_info: { username: 'demo' } },
+            });
+        }
+    );
+
+    it(
+        're-registers a missing provider target before retrying Stalker requests',
+        async () => {
+            const originalFetch = globalThis.fetch;
+            const fetchMock = jest
+                .fn()
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 404,
+                    statusText: 'Not Found',
+                    clone: () => ({
+                        json: async () => ({
+                            message: 'Provider target not found',
+                            status: 404,
+                        }),
+                    }),
+                } as unknown as Response)
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({ payload: { js: [] } }),
+                } as unknown as Response);
+            globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+            try {
+                const pending = service.forwardStalkerRequest({
+                    url: 'https://provider.example/portal.php',
+                    macAddress: '00:1A:79:AA:BB:CC',
+                    params: { action: 'get_categories' },
+                    silent: true,
+                });
+
+                http.expectOne((req) =>
+                    req.url.endsWith('/provider-targets')
+                ).flush({ targetId: 'stale-target' });
+                await new Promise((resolve) => setTimeout(resolve));
+
+                const firstRequestUrl = new URL(
+                    String(fetchMock.mock.calls[0]?.[0])
+                );
+                expect(firstRequestUrl.searchParams.get('targetId')).toBe(
+                    'stale-target'
+                );
+
+                await new Promise((resolve) => setTimeout(resolve));
+                http.expectOne((req) =>
+                    req.url.endsWith('/provider-targets')
+                ).flush({ targetId: 'refreshed-target' });
+
+                await expect(pending).resolves.toEqual({ js: [] });
+                expect(fetchMock).toHaveBeenCalledTimes(2);
+                const retriedRequestUrl = new URL(
+                    String(fetchMock.mock.calls[1]?.[0])
+                );
+                expect(retriedRequestUrl.searchParams.get('targetId')).toBe(
+                    'refreshed-target'
+                );
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
         }
     );
 
