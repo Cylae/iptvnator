@@ -1,6 +1,6 @@
 # EPG Streaming Resource Limits
 
-IPTVnator decodes XMLTV streams incrementally and writes channels and programmes to SQLite in batches. Streaming avoids buffering an entire guide, but it does not by itself protect against a compressed response that expands without bound or a single XML element containing an enormous text value.
+IPTVnator decodes XMLTV streams incrementally and writes channels and programmes to SQLite in batches. A bounded private spool plus preflight validation and one outer SQLite transaction prevent incomplete feeds from replacing the last successful source. Streaming still needs explicit limits because a compressed response can expand without bound or one XML element can contain an enormous text value.
 
 ## Limits
 
@@ -9,6 +9,14 @@ IPTVnator decodes XMLTV streams incrementally and writes channels and programmes
 - The decoded-byte limit applies to both remote URLs and user-authorized local files. Local file authorization and remote URL / redirect validation remain separate controls; passing one does not bypass the other.
 
 A limit violation fails the EPG import with an explicit `ERR_EPG_RESPONSE_TOO_LARGE` or XMLTV text-field error. The worker remains isolated from the renderer, and the stream pipeline tears down upstream sources when downstream decoding or validation fails.
+
+## Validation and atomic refresh
+
+The decoded stream is SAX-validated while it is spooled to a uniquely created temporary directory (directory permissions `0700`, file mode `0600`). The same 256 MiB decoded-input cap and 1 MiB text-field cap apply during this validation pass. No active EPG rows are changed until the complete document has parsed successfully and contains at least one channel.
+
+The validated spool is then replayed in fixed 64 KiB reads through a UTF-8 `StringDecoder` while the source update runs inside one outer SQLite transaction. Existing channel/programme batch writes become nested savepoints, so a later import or storage failure rolls back earlier batches rather than leaving a partial refresh. Ordinary SQLite constraint failures affecting an individual programme row remain skippable; other storage failures propagate and abort the transaction. No database write transaction is held open during network I/O. The temporary directory is removed in a `finally` path on success and failure.
+
+This costs one extra SAX pass, sequential temporary-disk I/O, and up to 256 MiB of temporary storage in addition to the database space. A worker forcibly terminated by the operating system may not execute language-level cleanup; the spool is private to the current user and uses a random temporary directory name.
 
 ## Rationale
 
