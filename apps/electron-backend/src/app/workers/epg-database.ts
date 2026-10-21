@@ -188,8 +188,17 @@ export class EpgDatabase {
                         sourceUrl
                     );
                     insertedCount++;
-                } catch {
-                    // Skip individual failures such as FK constraint errors.
+                } catch (error) {
+                    const code = (error as { code?: unknown } | null)?.code;
+                    if (
+                        typeof code === 'string' &&
+                        code.startsWith('SQLITE_CONSTRAINT')
+                    ) {
+                        // Invalid individual rows must not discard the rest of
+                        // a feed, but storage failures must abort the transaction.
+                        continue;
+                    }
+                    throw error;
                 }
             }
         });

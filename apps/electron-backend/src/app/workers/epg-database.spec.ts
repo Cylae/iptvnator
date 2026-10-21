@@ -4,7 +4,7 @@ import {
     EpgDatabaseClearOperation,
     EpgDatabaseSourceClearOperation,
 } from './epg-database';
-import type { ParsedChannel } from './epg-streaming-parser';
+import type { ParsedChannel, ParsedProgram } from './epg-streaming-parser';
 
 function createDatabaseMock(exec: jest.Mock) {
     const database = {
@@ -27,6 +27,8 @@ function createEpgDatabaseMock(
         dedupIndexExists?: boolean;
         /** Make the CREATE UNIQUE INDEX statement throw on run(). */
         failIndexCreation?: boolean;
+        /** Simulate an error for programme-row writes. */
+        programInsertError?: Error;
     } = {}
 ) {
     const statements = new Map<string, jest.Mock>();
@@ -38,6 +40,12 @@ function createEpgDatabaseMock(
                 normalized.startsWith('CREATE UNIQUE INDEX')
             ) {
                 throw new Error('UNIQUE constraint failed');
+            }
+            if (
+                options.programInsertError &&
+                normalized.startsWith('INSERT INTO epg_programs')
+            ) {
+                throw options.programInsertError;
             }
         });
         const get = jest.fn(() =>
@@ -68,6 +76,74 @@ describe('EpgDatabase', () => {
 
         expect(epgDb.runInTransaction(operation)).toBe('committed');
         expect(database.transaction).toHaveBeenLastCalledWith(operation);
+    });
+
+    it('propagates database failures so an outer source transaction can roll back', () => {
+        const failure = Object.assign(new Error('database disk is full'), {
+            code: 'SQLITE_FULL',
+        });
+        const { Database } = createEpgDatabaseMock({
+            programInsertError: failure,
+        });
+        const epgDb = new EpgDatabase(Database);
+        const sourceUrl = 'https://example.com/guide.xml';
+        epgDb.insertChannels([
+            {
+                id: 'channel-1',
+                displayName: [{ lang: '', value: 'Channel' }],
+                icon: [],
+                url: [],
+            },
+        ], sourceUrl);
+
+        const program: ParsedProgram = {
+            start: '2026-10-21T09:00:00.000Z',
+            stop: '2026-10-21T10:00:00.000Z',
+            channel: 'channel-1',
+            title: [{ lang: '', value: 'News' }],
+            desc: [],
+            category: [],
+            date: '',
+            episodeNum: [],
+            icon: [],
+            rating: [],
+        };
+
+        expect(() => epgDb.insertPrograms([program], sourceUrl)).toThrow(failure);
+    });
+
+    it('continues past row-level SQLite constraint errors', () => {
+        const failure = Object.assign(new Error('invalid foreign key'), {
+            code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+        });
+        const { Database } = createEpgDatabaseMock({
+            programInsertError: failure,
+        });
+        const epgDb = new EpgDatabase(Database);
+        const sourceUrl = 'https://example.com/guide.xml';
+        epgDb.insertChannels([
+            {
+                id: 'channel-1',
+                displayName: [{ lang: '', value: 'Channel' }],
+                icon: [],
+                url: [],
+            },
+        ], sourceUrl);
+
+        const program: ParsedProgram = {
+            start: '2026-10-21T09:00:00.000Z',
+            stop: '2026-10-21T10:00:00.000Z',
+            channel: 'channel-1',
+            title: [{ lang: '', value: 'News' }],
+            desc: [],
+            category: [],
+            date: '',
+            episodeNum: [],
+            icon: [],
+            rating: [],
+        };
+
+        expect(epgDb.insertPrograms([program], sourceUrl)).toBe(0);
     });
 
     it('refreshes a source selectively, keeping the recent past-programme archive', () => {
