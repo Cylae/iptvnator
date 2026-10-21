@@ -76,7 +76,7 @@ Do not declare completion until the final commit has been checked against the in
 
 1. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
 2. Validate the new atomic EPG spool/replay implementation against real SQLite integration tests and supported Windows/macOS/Linux runtimes. Confirm temporary-disk capacity and stale-spool cleanup behavior under Windows/macOS/Linux and concurrent worker scenarios before release.
-3. Add a process-wide budget for concurrent buffered provider response bodies; provider-target URL/DNS admission is now capped at 16 active validations per process and the route regression has been authored, but remains unexecuted.
+3. Validate the new shared 512 MiB provider body-buffer budget on the repository toolchain; the remaining memory risk is parsed JSON object graphs and values retained after helper return, which this byte budget does not cover.
 4. Validate using the repository's declared Node/pnpm versions. The available runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against the final head.
 5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
 
@@ -121,7 +121,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** Exact byte limits, oversized streaming bodies, UTF-8 counting/BOM behavior, gzip expansion, redirect-hop configuration, and failed-2xx body handling.
 - **Validation:** The PR reports standalone probes only. The committed Jest suites, typecheck, lint, coverage, integration/E2E, and CI have not been executed for this head.
 - **Compatibility gate:** Verify representative large Xtream/Stalker catalog responses before merge; the 128 MiB generic cap may reject unusually large responses.
-- **Aggregate-memory risk to validate:** Per-response limits do not bound total memory across concurrent requests. The web transport buffers stream chunks, concatenates them, and creates a text/JSON representation; the reviewed host guard is a circuit breaker, not a general concurrency limiter. Verify a process-wide in-flight/byte budget under concurrent large responses, or explicitly retain this residual risk before presenting the change as complete memory-exhaustion protection.
+- **Aggregate-memory remediation added:** `provider-response.ts` reserves a shared 512 MiB budget across streamed body chunks, concat output buffers, and a conservative UTF-16 decoding allowance. It aborts a body before allocating when reservations exceed capacity and normalizes the condition to a retryable 503. Tests are authored but unexecuted. The budget does not include parsed JSON object graphs or results retained after the helper returns; validate actual RSS under representative concurrency before claiming process-wide memory exhaustion is solved.
 
 ### Integrated decoded XMLTV resource limits — original PR #6, consolidated in PR #7
 
@@ -147,7 +147,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** Bounded LRU behavior, active-target recency, duplicate registration, URL object isolation, invalid capacity values, shared in-flight registration, browser cache eviction, per-backend cache separation, and recovery for playlist, Xtream, and Stalker requests.
 - **Documentation and release note:** `docs/architecture/pwa-self-hosted.md` and `.changes/security-provider-target-registry.md`.
 - **Validation:** These tests are authored but not executed. The working environment cannot clone the repository and the Actions API continues to return zero workflow runs/checks. Do not merge until the owning web-backend and web unit suites, typechecks, lint, and relevant E2E checks have run.
-- **Admission control added:** The LRU still bounds retained URL entries, and `ProviderTargetValidationGate` now caps active `POST /provider-targets` URL/DNS validations at 16. Requests beyond capacity fail fast with HTTP 503 rather than entering an unbounded waiting queue. Unit and integration regressions are authored but have not run on the repository toolchain. **Remaining memory risk:** per-response caps still do not bound the sum of several large bodies being buffered concurrently; a shared in-flight byte budget remains to be designed and validated.
+- **Admission control added:** The LRU bounds retained URL entries, `ProviderTargetValidationGate` caps active `POST /provider-targets` URL/DNS validations at 16, and the shared provider-body budget caps concurrent stream-buffer/decoding reservations at 512 MiB. Both overflow paths fail fast with HTTP 503. Unit and integration regressions are authored but have not run on the repository toolchain. Remaining memory risk is concentrated in parsed JSON object graphs and values retained after the response helper returns.
 
 
 ### Consolidation record — 2026-10-21
