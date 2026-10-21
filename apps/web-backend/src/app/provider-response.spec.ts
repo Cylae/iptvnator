@@ -90,6 +90,21 @@ describe('readProviderBody response size limits', () => {
         expect(budget.reservedBytes).toBe(0);
     });
 
+    it('releases its reservations when the per-response cap rejects a later chunk', async () => {
+        const budget = new ProviderResponseMemoryBudget(32);
+        const source = Readable.from([
+            Buffer.from('1234'),
+            Buffer.from('5678'),
+        ]);
+
+        await expect(
+            readProviderBody(source, true, undefined, undefined, 5, budget)
+        ).rejects.toBeInstanceOf(ProviderResponseTooLargeError);
+
+        expect(source.destroyed).toBe(true);
+        expect(budget.reservedBytes).toBe(0);
+    });
+
     it('rejects a body when other in-flight reads exhaust the shared budget', async () => {
         const budget = new ProviderResponseMemoryBudget(12);
         expect(budget.tryReserve(8)).toBe(true);

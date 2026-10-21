@@ -347,13 +347,19 @@ https://stream.example/live.m3u8`);
                 // Do not rely on a fixed sleep to decide whether the
                 // overflow request reached the server. Only a 503 can settle
                 // this race before the held DNS operations are released.
+                const neverResponds = new Promise<Response>(
+                    () => undefined
+                );
                 const overloadRequest = Promise.race(
-                    requests.map(async (request) => {
-                        const response = await request;
-                        return response.status === 503
-                            ? response
-                            : new Promise<Response>(() => undefined);
-                    })
+                    requests.map((request) =>
+                        request.then(
+                            (response) =>
+                                response.status === 503
+                                    ? response
+                                    : neverResponds,
+                            () => neverResponds
+                        )
+                    )
                 );
                 let overloadTimer: ReturnType<typeof setTimeout> | undefined;
                 const overloadResponse = await Promise.race([
