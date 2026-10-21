@@ -76,13 +76,18 @@ The current self-hosted PWA uses these `apps/web-backend` routes:
 The backend retains at most 1,024 registered provider URLs per process. The
 registry uses least-recently-used eviction: new registrations replace the
 oldest inactive target once the limit is reached, and successful lookups refresh
-a target's recency. The PWA also keeps a separate, bounded cache of at most 256
-recent registrations, keyed by both provider URL and backend URL. These bounds
-prevent long-lived or exposed self-hosted instances from accumulating unlimited
-credential-bearing URL objects or registration promises in memory. A
-missing-target response means the registration was evicted or the backend
-restarted; the PWA re-registers that URL and retries the request once. Upstream
-provider 404 responses are not retried by this recovery path.
+a target's recency. The backend also admits at most 16 concurrent provider
+URL/DNS validations. When all slots are occupied, additional
+`POST /provider-targets` requests receive HTTP 503 with a fixed message instead
+of creating more simultaneous resolver work; clients can retry after active
+validations finish. This is a per-process limit, not a deployment-wide quota.
+The PWA keeps a separate, bounded cache of at most 256 recent registrations,
+keyed by both provider URL and backend URL. These bounds prevent unbounded
+retention of credential-bearing URL objects and registration promises in
+long-lived or exposed self-hosted instances. A missing-target response means
+the registration was evicted or the backend restarted; the PWA re-registers
+that URL and retries the request once. Upstream provider 404 responses are not
+retried by this recovery path.
 
 The PWA continues to use `PwaService`; only the backend base URL is resolved at
 runtime. Electron routes remain owned by the Electron backend and preload

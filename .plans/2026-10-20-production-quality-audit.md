@@ -76,7 +76,7 @@ Do not declare completion until the final commit has been checked against the in
 
 1. Obtain real validation for the final integration head: Electron backend tests and typecheck/lint; web-backend tests; web unit tests and typecheck/lint; affected coverage/validation gates; relevant PWA and EPG integration journeys. Standalone probes are supplemental only.
 2. Resolve or explicitly accept the EPG partial-refresh data-integrity limitation before production release; an atomic staging-and-publish design remains a release consideration.
-3. Add process-wide backpressure for concurrent provider-body buffering and concurrent provider-target URL/DNS validation before declaring the resource-bound work production-ready.
+3. Add a process-wide budget for concurrent buffered provider response bodies; provider-target URL/DNS admission is now capped at 16 active validations per process and the route regression has been authored, but remains unexecuted.
 4. Validate using the repository's declared Node/pnpm versions. The available runtime is below the declared Node minimum, and local clone DNS is blocked; no check may be described as passing unless it executes against the final head.
 5. Continue the audit across local-file authorization, Xtream backup/restore, playback lifecycle, embedded MPV, portal credential boundaries, packaging, and compatibility. Treat local edits mentioned only in previous transcripts as unimplemented until a patch or working tree is recovered and verified.
 
@@ -147,7 +147,7 @@ Do not declare completion until the final commit has been checked against the in
 - **Regression coverage:** Bounded LRU behavior, active-target recency, duplicate registration, URL object isolation, invalid capacity values, shared in-flight registration, browser cache eviction, per-backend cache separation, and recovery for playlist, Xtream, and Stalker requests.
 - **Documentation and release note:** `docs/architecture/pwa-self-hosted.md` and `.changes/security-provider-target-registry.md`.
 - **Validation:** These tests are authored but not executed. The working environment cannot clone the repository and the Actions API continues to return zero workflow runs/checks. Do not merge until the owning web-backend and web unit suites, typechecks, lint, and relevant E2E checks have run.
-- **Remaining admission risk:** The LRU bounds retained URL entries, but it does not by itself bound concurrent `POST /provider-targets` URL/DNS validations or the callers waiting on those validations. Stress-test large numbers of parallel unique URLs and add explicit backpressure/concurrency limits if this endpoint is exposed to untrusted clients.
+- **Admission control added:** The LRU still bounds retained URL entries, and `ProviderTargetValidationGate` now caps active `POST /provider-targets` URL/DNS validations at 16. Requests beyond capacity fail fast with HTTP 503 rather than entering an unbounded waiting queue. Unit and integration regressions are authored but have not run on the repository toolchain. **Remaining memory risk:** per-response caps still do not bound the sum of several large bodies being buffered concurrently; a shared in-flight byte budget remains to be designed and validated.
 
 
 ### Consolidation record — 2026-10-21
