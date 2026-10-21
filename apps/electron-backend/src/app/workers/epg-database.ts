@@ -102,6 +102,14 @@ export class EpgDatabase {
     }
 
     /**
+     * Runs all batch writes for one already-validated source inside a single
+     * outer transaction. Per-batch transactions become nested savepoints.
+     */
+    runInTransaction<T>(operation: () => T): T {
+        return this.db.transaction(operation)();
+    }
+
+    /**
      * Insert a batch of channels. When `clearTodayAndFuture` is true, the
      * selective delete (today+future and older-than-7-days) runs inside the
      * same transaction so a parse failure after the delete atomically rolls

@@ -61,6 +61,15 @@ function createEpgDatabaseMock(
 }
 
 describe('EpgDatabase', () => {
+    it('runs a complete source import inside an outer transaction', () => {
+        const { Database, database } = createEpgDatabaseMock();
+        const epgDb = new EpgDatabase(Database);
+        const operation = jest.fn(() => 'committed');
+
+        expect(epgDb.runInTransaction(operation)).toBe('committed');
+        expect(database.transaction).toHaveBeenLastCalledWith(operation);
+    });
+
     it('refreshes a source selectively, keeping the recent past-programme archive', () => {
         const sourceUrl = 'https://example.com/playlist-guide.xml';
         const { Database, database, statements } = createEpgDatabaseMock();
